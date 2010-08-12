@@ -1,0 +1,274 @@
+#!/usr/bin/perl
+
+#
+# MultiPath Estimater
+#
+# Author:
+#   Thomas Liske <liske@ibh.de>
+#
+# Copyright Holder:
+#   2010 (C) IBH IT-Service GmbH [http://micky.ibh.net/~liske/mupe/]
+#
+# License:
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this package; if not, write to the Free Software
+#   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+#
+
+=head1 NAME
+
+mupe - MultiPath Estimator
+
+=head1 SYNOPSIS
+
+mupe <options>
+
+ Options:
+   -i <file.pcap>                  pcap input file
+
+   --help                          brief help message
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-i <file.pcap>>
+
+Input pcap file with Radiotap headers.
+
+=item B<--help>
+
+Print a brief help message and exits.
+
+
+=back
+
+=head1 DESCRIPTION
+
+=cut
+
+use strict;
+use warnings;
+use IO::Socket;
+use Getopt::Std;
+use Pod::Usage;
+
+use constant {
+    # Taken from wireshark 1.3.4 (epan/dissectors/packet-radiotap.c)
+    IEEE80211_RADIOTAP_TSFT => 0,
+    IEEE80211_RADIOTAP_FLAGS => 1,
+    IEEE80211_RADIOTAP_RATE => 2,
+    IEEE80211_RADIOTAP_CHANNEL => 3,
+    IEEE80211_RADIOTAP_FHSS => 4,
+    IEEE80211_RADIOTAP_DBM_ANTSIGNAL => 5,
+    IEEE80211_RADIOTAP_DBM_ANTNOISE => 6,
+    IEEE80211_RADIOTAP_LOCK_QUALITY => 7,
+    IEEE80211_RADIOTAP_TX_ATTENUATION => 8,
+    IEEE80211_RADIOTAP_DB_TX_ATTENUATION => 9,
+    IEEE80211_RADIOTAP_DBM_TX_POWER => 10,
+    IEEE80211_RADIOTAP_ANTENNA => 11,
+    IEEE80211_RADIOTAP_DB_ANTSIGNAL => 12,
+    IEEE80211_RADIOTAP_DB_ANTNOISE => 13,
+    IEEE80211_RADIOTAP_RX_FLAGS => 14,
+    IEEE80211_RADIOTAP_XCHANNEL => 18,
+    IEEE80211_RADIOTAP_EXT => 31,
+
+    IEEE80211_CHAN_TURBO => 0x00010,
+    IEEE80211_CHAN_CCK => 0x00020,
+    IEEE80211_CHAN_OFDM => 0x00040,
+    IEEE80211_CHAN_2GHZ => 0x00080,
+    IEEE80211_CHAN_5GHZ => 0x00100,
+    IEEE80211_CHAN_PASSIVE => 0x00200,
+    IEEE80211_CHAN_DYN => 0x00400,
+    IEEE80211_CHAN_GFSK => 0x00800,
+    IEEE80211_CHAN_GSM => 0x01000,
+    IEEE80211_CHAN_STURBO => 0x02000,
+    IEEE80211_CHAN_HALF => 0x04000,
+    IEEE80211_CHAN_QUARTER => 0x08000,
+    IEEE80211_CHAN_HT20 => 0x10000,
+    IEEE80211_CHAN_HT40U => 0x20000,
+    IEEE80211_CHAN_HT40D => 0x40000,
+
+    IEEE80211_CHAN_FHSS => 0x00880,
+    IEEE80211_CHAN_A => 0x00140,
+    IEEE80211_CHAN_B => 0x00100,
+    IEEE80211_CHAN_PUREG => 0x00120,
+    IEEE80211_CHAN_G => 0x00480,
+    IEEE80211_CHAN_T => 0x00150,
+    IEEE80211_CHAN_108G => 0x00490,
+    IEEE80211_CHAN_108PUREG => 0x00130,
+
+    IEEE80211_RADIOTAP_F_CFP => 0x01,
+    IEEE80211_RADIOTAP_F_SHORTPRE => 0x02,
+    IEEE80211_RADIOTAP_F_WEP => 0x04,
+    IEEE80211_RADIOTAP_F_FRAG => 0x08,
+    IEEE80211_RADIOTAP_F_FCS => 0x10,
+    IEEE80211_RADIOTAP_F_DATAPAD => 0x20,
+    IEEE80211_RADIOTAP_F_BADFCS => 0x40,
+    IEEE80211_RADIOTAP_F_SHORTGI => 0x80,
+};
+
+# Channel => Frequency (MHz) 802.11b/g Hash
+# http://de.wikipedia.org/wiki/IEEE_802.11
+my %chanfreq_80211bg = (
+    1 => 2412,
+    2 => 2417,
+    3 => 2422,
+    4 => 2427,
+    5 => 2432,
+    6 => 2437,
+    7 => 2442,
+    8 => 2447,
+    9 => 2452,
+    10 => 2457,
+    11 => 2462,
+    12 => 2467,
+    13 => 2472,
+    14 => 2484,
+);
+
+# Channel => Frequency (MHz) 802.11a Hash
+# http://de.wikipedia.org/wiki/IEEE_802.11
+my %chanfreq_80211a = (
+    36 => 5180,
+    40 => 5200,
+    44 => 5220,
+    48 => 5240,
+    52 => 5260,
+    56 => 5280,
+    60 => 5300,
+    64 => 5320,
+    100 => 5500,
+    104 => 5520,
+    108 => 5540,
+    112 => 5560,
+    116 => 5580,
+    120 => 5600,
+    124 => 5620,
+    128 => 5640,
+    132 => 5660,
+    136 => 5680,
+    140 => 5700,
+    147 => 5735,
+    151 => 5755,
+    155 => 5775,
+    159 => 5795,
+    163 => 5815,
+    167 => 5835,
+    171 => 5855,
+);
+
+my $terminate = 0;
+
+
+
+$SIG{INT} = "sigint";
+sub sigint {
+    if($terminate) {
+	close(HOUT);
+	print "Terminated.\n";
+	exit(0);
+    }
+    else {
+	$terminate = 1;
+    }
+}
+
+my %opts;
+
+getopts('i:', \%opts);
+
+HELP_MESSAGE() unless(defined($opts{'i'}));
+
+sub HELP_MESSAGE {
+    pod2usage(1);
+}
+
+# Add the following fields to the Radiotap header (if requested)
+my @radiotap_presence = (IEEE80211_RADIOTAP_FLAGS);
+push(@radiotap_presence,  IEEE80211_RADIOTAP_CHANNEL) unless($opts{'c'});
+push(@radiotap_presence, IEEE80211_RADIOTAP_DBM_ANTSIGNAL) unless($opts{'r'});
+
+open(HOUT, '>'.$opts{'o'}) || die "Could not open file '".$opts{'o'}."': $!\n";
+
+# PCAP Header
+print HOUT pack('L', 0xa1b2c3d4);
+print HOUT pack('S', 2);
+print HOUT pack('S', 4);
+print HOUT pack('l', 0);
+print HOUT pack('L', 0);
+print HOUT pack('L', 0xffff);
+print HOUT pack('L', 127);
+
+
+my $sock = IO::Socket::INET->new(Proto => 'udp', LocalPort => 5000) or die "socket: $@";
+my $msg;
+while(defined($sock->recv($msg, 65535))) {
+	my ($tv_sec, $tv_usec) = gettimeofday();
+
+	my ($ap_unknown1, $ap_caplength1, $ap_caplength2, $ap_unknown4a,
+	    $ap_unknown4b, $ap_timestamp, $ap_unknown5, $ap_channel,
+	    $ap_rssi, $ap_data) = unpack('nnnNCNnCva*', $msg);
+
+	print HOUT pack('L', $tv_sec);
+	print HOUT pack('L', $tv_usec);
+
+	my $pattern = 'CCvV';
+	my @data = (0, 0, 8, 0);
+
+	foreach my $bit (@radiotap_presence) {
+	    $data[3] |= 1 << $bit;
+	}
+
+	# has FCS
+	if($data[3] & (1 << IEEE80211_RADIOTAP_FLAGS)) {
+	    $pattern .= 'v';
+	    $data[2] += 2;
+	    push(@data, IEEE80211_RADIOTAP_F_FCS);
+	}
+
+	# has Channel
+	if($data[3] & (1 << IEEE80211_RADIOTAP_CHANNEL)) {
+	    $pattern .= 'vv';
+	    $data[2] += 4;
+
+	    if(exists($chanfreq_80211bg{$ap_channel})) {
+		push(@data, $chanfreq_80211bg{$ap_channel}, IEEE80211_CHAN_G);
+	    }
+	    elsif(exists($chanfreq_80211a{$ap_channel})) {
+		push(@data, $chanfreq_80211a{$ap_channel}, IEEE80211_CHAN_A);
+	    }
+	    else {
+		push(@data, $ap_channel, 0);
+	    }
+	}
+
+	# has DBM Antenna Signal
+	if($data[3] & (1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL)) {
+	    $pattern .= 'v';
+	    $data[2] += 2;
+	    push(@data, -($ap_rssi & 0xff));
+	}
+
+die if($ap_caplength2 != length($msg));
+
+	# Calculate new packet length
+	print HOUT pack('L', $ap_caplength1+$data[2]);
+	print HOUT pack('L', $ap_caplength2+$data[2]);
+
+	# Write Radiotap Header (version, pad, length, present)
+	print HOUT pack($pattern, @data);
+
+	# The originial 'wireless' packet...
+	print HOUT pack("a$ap_caplength2", $ap_data);
+}
