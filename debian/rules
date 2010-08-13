@@ -29,7 +29,7 @@ build-stamp: configure-stamp
 	# Add here commands to compile the package.
 	#$(MAKE)
 	#docbook-to-man debian/mupe.sgml > mupe.1
-	pod2man mupe > debian/mupe.1
+	pod2man mupe > mupe.1
 
 	touch $@
 
@@ -40,7 +40,7 @@ clean:
 
 	# Add here commands to clean up after the build process.
 #	$(MAKE) clean
-	rm -f debian/mupe.1
+	rm -f mupe.1
 
 	dh_clean 
 
@@ -63,7 +63,7 @@ binary-arch: build install
 	dh_testdir
 	dh_testroot
 	dh_installchangelogs 
-#	dh_installdocs
+	dh_installdocs
 #	dh_installexamples
 #	dh_install
 #	dh_installmenu

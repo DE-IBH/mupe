@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# MultiPath Estimater
+# MUltiPath Estimater
 #
 # Author:
 #   Thomas Liske <liske@ibh.de>
@@ -27,14 +27,15 @@
 
 =head1 NAME
 
-mupe - MultiPath Estimator
+mupe - MUltiPath Estimator
 
 =head1 SYNOPSIS
 
 mupe <options>
 
  Options:
-   -i <file.pcap>                  pcap input file
+   -i <file.pcap>                  pcap input file (required)
+   -t <time>                       timeslot size in seconds (default: 2)
 
    --help                          brief help message
 
@@ -45,6 +46,10 @@ mupe <options>
 =item B<-i <file.pcap>>
 
 Input pcap file with Radiotap headers.
+
+=item B<-t <time>>
+
+Sets timeslot size in seconds (default: 2).
 
 =item B<--help>
 
@@ -59,9 +64,14 @@ Print a brief help message and exits.
 
 use strict;
 use warnings;
-use IO::Socket;
 use Getopt::Std;
 use Pod::Usage;
+use Net::Pcap;
+use DBI;
+use Chart::Gnuplot;
+use POSIX;
+
+$|++;
 
 use constant {
     # Taken from wireshark 1.3.4 (epan/dissectors/packet-radiotap.c)
@@ -82,111 +92,20 @@ use constant {
     IEEE80211_RADIOTAP_RX_FLAGS => 14,
     IEEE80211_RADIOTAP_XCHANNEL => 18,
     IEEE80211_RADIOTAP_EXT => 31,
-
-    IEEE80211_CHAN_TURBO => 0x00010,
-    IEEE80211_CHAN_CCK => 0x00020,
-    IEEE80211_CHAN_OFDM => 0x00040,
-    IEEE80211_CHAN_2GHZ => 0x00080,
-    IEEE80211_CHAN_5GHZ => 0x00100,
-    IEEE80211_CHAN_PASSIVE => 0x00200,
-    IEEE80211_CHAN_DYN => 0x00400,
-    IEEE80211_CHAN_GFSK => 0x00800,
-    IEEE80211_CHAN_GSM => 0x01000,
-    IEEE80211_CHAN_STURBO => 0x02000,
-    IEEE80211_CHAN_HALF => 0x04000,
-    IEEE80211_CHAN_QUARTER => 0x08000,
-    IEEE80211_CHAN_HT20 => 0x10000,
-    IEEE80211_CHAN_HT40U => 0x20000,
-    IEEE80211_CHAN_HT40D => 0x40000,
-
-    IEEE80211_CHAN_FHSS => 0x00880,
-    IEEE80211_CHAN_A => 0x00140,
-    IEEE80211_CHAN_B => 0x00100,
-    IEEE80211_CHAN_PUREG => 0x00120,
-    IEEE80211_CHAN_G => 0x00480,
-    IEEE80211_CHAN_T => 0x00150,
-    IEEE80211_CHAN_108G => 0x00490,
-    IEEE80211_CHAN_108PUREG => 0x00130,
-
-    IEEE80211_RADIOTAP_F_CFP => 0x01,
-    IEEE80211_RADIOTAP_F_SHORTPRE => 0x02,
-    IEEE80211_RADIOTAP_F_WEP => 0x04,
-    IEEE80211_RADIOTAP_F_FRAG => 0x08,
-    IEEE80211_RADIOTAP_F_FCS => 0x10,
-    IEEE80211_RADIOTAP_F_DATAPAD => 0x20,
-    IEEE80211_RADIOTAP_F_BADFCS => 0x40,
-    IEEE80211_RADIOTAP_F_SHORTGI => 0x80,
 };
 
-# Channel => Frequency (MHz) 802.11b/g Hash
-# http://de.wikipedia.org/wiki/IEEE_802.11
-my %chanfreq_80211bg = (
-    1 => 2412,
-    2 => 2417,
-    3 => 2422,
-    4 => 2427,
-    5 => 2432,
-    6 => 2437,
-    7 => 2442,
-    8 => 2447,
-    9 => 2452,
-    10 => 2457,
-    11 => 2462,
-    12 => 2467,
-    13 => 2472,
-    14 => 2484,
+my %IEEE80211_RADIOTAP_FIELDLEN = (
+    0 => 8,
+    1 => 1,
+    2 => 1,
+    3 => 4,
+    4 => 2,
+    5 => 1,
+    6 => 1,
 );
-
-# Channel => Frequency (MHz) 802.11a Hash
-# http://de.wikipedia.org/wiki/IEEE_802.11
-my %chanfreq_80211a = (
-    36 => 5180,
-    40 => 5200,
-    44 => 5220,
-    48 => 5240,
-    52 => 5260,
-    56 => 5280,
-    60 => 5300,
-    64 => 5320,
-    100 => 5500,
-    104 => 5520,
-    108 => 5540,
-    112 => 5560,
-    116 => 5580,
-    120 => 5600,
-    124 => 5620,
-    128 => 5640,
-    132 => 5660,
-    136 => 5680,
-    140 => 5700,
-    147 => 5735,
-    151 => 5755,
-    155 => 5775,
-    159 => 5795,
-    163 => 5815,
-    167 => 5835,
-    171 => 5855,
-);
-
-my $terminate = 0;
-
-
-
-$SIG{INT} = "sigint";
-sub sigint {
-    if($terminate) {
-	close(HOUT);
-	print "Terminated.\n";
-	exit(0);
-    }
-    else {
-	$terminate = 1;
-    }
-}
 
 my %opts;
-
-getopts('i:', \%opts);
+getopts('t:i:', \%opts);
 
 HELP_MESSAGE() unless(defined($opts{'i'}));
 
@@ -194,81 +113,153 @@ sub HELP_MESSAGE {
     pod2usage(1);
 }
 
-# Add the following fields to the Radiotap header (if requested)
-my @radiotap_presence = (IEEE80211_RADIOTAP_FLAGS);
-push(@radiotap_presence,  IEEE80211_RADIOTAP_CHANNEL) unless($opts{'c'});
-push(@radiotap_presence, IEEE80211_RADIOTAP_DBM_ANTSIGNAL) unless($opts{'r'});
+my $tfactor = 2;
+if(defined($opts{'t'})) {
+    $! = 0;
+    ($tfactor) = POSIX::strtod($opts{'t'});
 
-open(HOUT, '>'.$opts{'o'}) || die "Could not open file '".$opts{'o'}."': $!\n";
+    die "Timeslot size must be float and greater than zero!\n" unless($tfactor > 0 && $! == 0);
+}
 
-# PCAP Header
-print HOUT pack('L', 0xa1b2c3d4);
-print HOUT pack('S', 2);
-print HOUT pack('S', 4);
-print HOUT pack('l', 0);
-print HOUT pack('L', 0);
-print HOUT pack('L', 0xffff);
-print HOUT pack('L', 127);
+my $pcap_t;
+my $err;
 
+die "'$opts{i}' not readable!\n" unless(-r $opts{'i'});
+$pcap_t = Net::Pcap::open_offline($opts{'i'}, \$err);
+die "Could not open libpcap: $err\n" unless(defined($pcap_t));
 
-my $sock = IO::Socket::INET->new(Proto => 'udp', LocalPort => 5000) or die "socket: $@";
-my $msg;
-while(defined($sock->recv($msg, 65535))) {
-	my ($tv_sec, $tv_usec) = gettimeofday();
+unlink("$opts{i}.db") if(-e "$opts{i}.db");
 
-	my ($ap_unknown1, $ap_caplength1, $ap_caplength2, $ap_unknown4a,
-	    $ap_unknown4b, $ap_timestamp, $ap_unknown5, $ap_channel,
-	    $ap_rssi, $ap_data) = unpack('nnnNCNnCva*', $msg);
+my $dbh = DBI->connect("dbi:SQLite:dbname=$opts{i}.db","","");
+$dbh->do('CREATE TABLE beacons (tstamp REAL, bssid CHAR(12), freq INT, signal INT, noise INT, PRIMARY KEY (tstamp, bssid, freq))');
+my $sth_push = $dbh->prepare('INSERT INTO beacons (tstamp, bssid, freq, signal, noise) VALUES (?, ?, ?, ?, ?)');
 
-	print HOUT pack('L', $tv_sec);
-	print HOUT pack('L', $tv_usec);
+my $last_tsamp = 0;
+sub push_db {
+    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
+    $last_tsamp = $_[0];
 
-	my $pattern = 'CCvV';
-	my @data = (0, 0, 8, 0);
+    $sth_push->execute(@_);
+}
 
-	foreach my $bit (@radiotap_presence) {
-	    $data[3] |= 1 << $bit;
+sub process_pkt {
+    my($arg, $hdr, $pkt) = @_;
+
+    # decode Radiotap header
+    my ($it_version, $it_pad, $it_len, $it_present) = unpack('CCSL', $pkt);
+    my $offset = 8;
+    my $it_presence = $it_present;
+
+    my $rt_frequency;
+    my $rt_ssi_signal;
+    my $rt_ssi_noise;
+
+    while($it_present & (1 << IEEE80211_RADIOTAP_EXT)) {
+	$it_present = unpack('L', substr($pkt, $offset));
+	$it_presence |= $it_present << 32 * ($offset-4)/4;
+	$offset += 4;
+    }
+
+    ### XXX crude hack XXX ###
+    foreach my $fkey (sort keys %IEEE80211_RADIOTAP_FIELDLEN) {
+	if(($fkey == IEEE80211_RADIOTAP_CHANNEL) && ($it_presence & (1 << $fkey))) {
+	    $rt_frequency = unpack('v', substr($pkt, $offset));
+	}
+	elsif(($fkey == IEEE80211_RADIOTAP_DBM_ANTSIGNAL) && ($it_presence & (1 << $fkey))) {
+	    $rt_ssi_signal = unpack('c', substr($pkt, $offset));
+	}
+	elsif(($fkey == IEEE80211_RADIOTAP_DBM_ANTNOISE) && ($it_presence & (1 << $fkey))) {
+	    $rt_ssi_noise = unpack('c', substr($pkt, $offset));
 	}
 
-	# has FCS
-	if($data[3] & (1 << IEEE80211_RADIOTAP_FLAGS)) {
-	    $pattern .= 'v';
-	    $data[2] += 2;
-	    push(@data, IEEE80211_RADIOTAP_F_FCS);
+	if($it_presence & (1 << $fkey)) {
+	    $offset += $IEEE80211_RADIOTAP_FIELDLEN{$fkey};
 	}
+    }
+    ### XXX /crude hack XXX ###
 
-	# has Channel
-	if($data[3] & (1 << IEEE80211_RADIOTAP_CHANNEL)) {
-	    $pattern .= 'vv';
-	    $data[2] += 4;
+    # decode IEEE 802.11 Beacon frame
+    my ($type, $flags, $duration, $dst, $src, $bssid, $seq) = unpack('CCna6a6a6n', substr($pkt, $it_len));
 
-	    if(exists($chanfreq_80211bg{$ap_channel})) {
-		push(@data, $chanfreq_80211bg{$ap_channel}, IEEE80211_CHAN_G);
-	    }
-	    elsif(exists($chanfreq_80211a{$ap_channel})) {
-		push(@data, $chanfreq_80211a{$ap_channel}, IEEE80211_CHAN_A);
-	    }
-	    else {
-		push(@data, $ap_channel, 0);
-	    }
-	}
+    $dst = unpack('H12', $dst);
+    $src = unpack('H12', $src);
+    $bssid = unpack('H12', $bssid);
 
-	# has DBM Antenna Signal
-	if($data[3] & (1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL)) {
-	    $pattern .= 'v';
-	    $data[2] += 2;
-	    push(@data, -($ap_rssi & 0xff));
-	}
+    # filter for beacons
+    if($type == 0x80 && $dst eq 'ffffffffffff') {
+	push_db($hdr->{tv_sec}+$hdr->{tv_usec}/1000000, $bssid, $rt_frequency, $rt_ssi_signal, $rt_ssi_noise);
 
-die if($ap_caplength2 != length($msg));
+	print ".";
+    }
+}
 
-	# Calculate new packet length
-	print HOUT pack('L', $ap_caplength1+$data[2]);
-	print HOUT pack('L', $ap_caplength2+$data[2]);
+# Process packets
+print "Reading pcap file";
+$dbh->begin_work;
+Net::Pcap::loop($pcap_t, -1, \&process_pkt, 0);
+$dbh->commit;
+print "\n";
 
-	# Write Radiotap Header (version, pad, length, present)
-	print HOUT pack($pattern, @data);
+print "Generating graphs:\n";
 
-	# The originial 'wireless' packet...
-	print HOUT pack("a$ap_caplength2", $ap_data);
+my $sth_qry = $dbh->prepare("SELECT CAST((tstamp/$tfactor) AS INT)*$tfactor AS tslot, COUNT(*), MIN(signal), AVG(signal), MAX(signal), MAX(signal) - MIN(signal) FROM beacons WHERE bssid=? AND freq=? GROUP BY tslot");
+foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq FROM beacons GROUP BY bssid, freq') }) {
+    my ($count, $bssid, $freq) = @{$row};
+    print " bssid $bssid: $freq kHz, $count beacons\n";
+
+    $sth_qry->execute($bssid, $freq);
+
+    my @tslots;
+    my @counts;
+    my %data;
+    foreach my $row (@{ $sth_qry->fetchall_arrayref() }) {
+	push(@tslots, ${$row}[0]);
+	push(@counts, ${$row}[1]);
+	push(@{$data{'MIN(rssi)'}}, ${$row}[2]);
+	push(@{$data{'AVG(rssi)'}}, ${$row}[3]);
+	push(@{$data{'MAX(rssi)'}}, ${$row}[4]);
+	push(@{$data{'MAX(rssi)-MIN(rssi)'}}, ${$row}[5]);
+    }
+
+    unlink("$bssid-$freq.png");
+    my $chart = Chart::Gnuplot->new(
+	output => "$bssid-$freq.png",
+	title => "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]",
+	xlabel => 'timeslot (since epoch)',
+	ylabel => 'dBm',
+	y2label => 'dB',
+	y2range => [0, 120],
+	imagesize => '2,2',
+	bg => 'white',
+	grid => {
+	    width => 1.
+	},
+	y2tics => {
+	    labels => [0, 10, 20, 30, 40],
+	},
+    );
+
+    my @ds;
+    my @colors = qw(brown green red blue);
+    foreach my $col (sort keys %data) {
+	my $axes = 'x1y1';
+	$axes = 'x1y2' if($col eq 'MAX(rssi)-MIN(rssi)');
+
+	my $color = shift(@colors);
+	push(@colors, $color);
+
+	push(@ds,
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@tslots,
+		ydata => $data{$col},
+		axes => $axes,
+		style => 'lines',
+		linetype => 1,
+		color => $color,
+		title => $col,
+	    )
+	);
+    }
+
+    $chart->plot2d(@ds);
 }
