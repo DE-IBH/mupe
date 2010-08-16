@@ -1,3 +1,13 @@
+mupe (0.2) unstable; urgency=low
+
+  * Print min/avg/max signal jitter.
+  * Splitup into three charts
+    (signal distri, signal jitter, beacon losses)
+  * Add suggestion by Andre Beck <beck@ibh.de>:
+    - merge BSSIDs by MAC address
+
+ -- Thomas Liske <liske@ibh.de>  Mon, 16 Aug 2010 15:10:44 +0200
+
 mupe (0.1) unstable; urgency=low
 
   * Initial Release.

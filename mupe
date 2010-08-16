@@ -35,6 +35,8 @@ mupe <options>
 
  Options:
    -i <file.pcap>                  pcap input file (required)
+   -l <linetype>                   linetype (default: points pt 1)
+   -s <BSSID subst>                perl regex subst on BSSIDs (default: s/.$/0/)
    -t <time>                       timeslot size in seconds (default: 2)
 
    --help                          brief help message
@@ -47,9 +49,17 @@ mupe <options>
 
 Input pcap file with Radiotap headers.
 
+=item B<-l <linetype>>
+
+Linetype to plot signal lines, see gnuplot(1) (default: I<points pt 1>).
+
+=item B<-s <BSSID subst>>
+
+Perl regex to apply on BSSID hex strings before processing, the default value zeros the last nibble (default: I<s/.$/0/>).
+
 =item B<-t <time>>
 
-Sets timeslot size in seconds (default: 2).
+Sets timeslot size in seconds (default: I<2>).
 
 =item B<--help>
 
@@ -105,9 +115,12 @@ my %IEEE80211_RADIOTAP_FIELDLEN = (
 );
 
 my %opts;
-getopts('t:i:', \%opts);
+getopts('s:l:t:i:', \%opts);
 
 HELP_MESSAGE() unless(defined($opts{'i'}));
+
+$opts{'l'} = 'points pt 1' unless(defined($opts{'l'}));
+$opts{'s'} = 's/.$/0/' unless(defined($opts{'s'}));
 
 sub HELP_MESSAGE {
     pod2usage(1);
@@ -128,14 +141,43 @@ die "'$opts{i}' not readable!\n" unless(-r $opts{'i'});
 $pcap_t = Net::Pcap::open_offline($opts{'i'}, \$err);
 die "Could not open libpcap: $err\n" unless(defined($pcap_t));
 
-unlink("$opts{i}.db") if(-e "$opts{i}.db");
+my $dbfn = "$opts{i}.mupe.db";
+unlink($dbfn);
+unlink("$dbfn-journal");
 
-my $dbh = DBI->connect("dbi:SQLite:dbname=$opts{i}.db","","");
+my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfn","","");
+$dbh->do('CREATE TABLE track_beacons (tstamp REAL, bssid CHAR(12), freq INT, PRIMARY KEY (tstamp, bssid, freq))');
 $dbh->do('CREATE TABLE beacons (tstamp REAL, bssid CHAR(12), freq INT, signal INT, noise INT, PRIMARY KEY (tstamp, bssid, freq))');
-my $sth_push = $dbh->prepare('INSERT INTO beacons (tstamp, bssid, freq, signal, noise) VALUES (?, ?, ?, ?, ?)');
+
+my %beacon_seqs;
+my %beacon_tstamp;
+my %beacon_otstamp;
+my $sth_push_track = $dbh->prepare('INSERT INTO track_beacons (tstamp, bssid, freq) VALUES (?, ?, ?)');
+sub track_beacon {
+    my ($tstamp, $bssid, $freq, $seq) = @_;
+
+    my $key = "${bssid}_$freq";
+
+    if(exists($beacon_seqs{$key}) && exists($beacon_tstamp{$key})) {
+	my $c = ($beacon_seqs{$key} - $seq) % 0xfff;
+
+	if(($c > 1) && ($c < 50)) {
+	    my $d = ($tstamp - $beacon_tstamp{$key}) / $c;
+	    my $t = $beacon_tstamp{$key};
+
+	    print '-';
+	    while(--$c) {
+		$sth_push_track->execute($t += $d, $bssid, $freq);
+	    }
+	}
+    }
+    $beacon_tstamp{$key} = $tstamp;
+    $beacon_seqs{$key} = ($seq + 1) % 0xff;
+}
 
 my $last_tsamp = 0;
-sub push_db {
+my $sth_push = $dbh->prepare('INSERT INTO beacons (tstamp, bssid, freq, signal, noise) VALUES (?, ?, ?, ?, ?)');
+sub push_beacon {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
@@ -179,15 +221,20 @@ sub process_pkt {
     ### XXX /crude hack XXX ###
 
     # decode IEEE 802.11 Beacon frame
-    my ($type, $flags, $duration, $dst, $src, $bssid, $seq) = unpack('CCna6a6a6n', substr($pkt, $it_len));
+    my ($type, $flags, $duration, $dst, $src, $bssid, $seq) = unpack('CCna6a6a6v', substr($pkt, $it_len));
 
     $dst = unpack('H12', $dst);
     $src = unpack('H12', $src);
     $bssid = unpack('H12', $bssid);
+    $seq >>= 4 if(defined($seq));
 
     # filter for beacons
     if($type == 0x80 && $dst eq 'ffffffffffff') {
-	push_db($hdr->{tv_sec}+$hdr->{tv_usec}/1000000, $bssid, $rt_frequency, $rt_ssi_signal, $rt_ssi_noise);
+	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
+	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
+
+	track_beacon($tstamp, $bssid, $rt_frequency, $seq);
+	push_beacon($tstamp, $bssid, $rt_frequency, $rt_ssi_signal, $rt_ssi_noise);
 
 	print ".";
     }
@@ -203,48 +250,94 @@ print "\n";
 print "Generating graphs:\n";
 
 my $sth_qry = $dbh->prepare("SELECT CAST((tstamp/$tfactor) AS INT)*$tfactor AS tslot, COUNT(*), MIN(signal), AVG(signal), MAX(signal), MAX(signal) - MIN(signal) FROM beacons WHERE bssid=? AND freq=? GROUP BY tslot");
-foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq FROM beacons GROUP BY bssid, freq') }) {
-    my ($count, $bssid, $freq) = @{$row};
+my $sth_trk = $dbh->prepare("SELECT CAST((tstamp/$tfactor) AS INT)*$tfactor AS tslot, COUNT(*) FROM track_beacons WHERE bssid=? AND freq=? GROUP BY tslot");
+foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(tstamp), MAX(tstamp) FROM beacons GROUP BY bssid, freq') }) {
+    my ($count, $bssid, $freq, $ts_min, $ts_max) = @{$row};
     print " bssid $bssid: $freq kHz, $count beacons\n";
 
     $sth_qry->execute($bssid, $freq);
-
     my @tslots;
     my @counts;
+    my @jitter;
     my %data;
+    my %d;
     foreach my $row (@{ $sth_qry->fetchall_arrayref() }) {
 	push(@tslots, ${$row}[0]);
 	push(@counts, ${$row}[1]);
 	push(@{$data{'MIN(rssi)'}}, ${$row}[2]);
 	push(@{$data{'AVG(rssi)'}}, ${$row}[3]);
 	push(@{$data{'MAX(rssi)'}}, ${$row}[4]);
-	push(@{$data{'MAX(rssi)-MIN(rssi)'}}, ${$row}[5]);
+	push(@jitter, ${$row}[5]);
+	$d{'avg'} += ${$row}[5];
+	$d{'min'} = ${$row}[5] unless(defined($d{'min'}) && ($d{'min'} < ${$row}[5]));
+	$d{'max'} = ${$row}[5] unless(defined($d{'max'}) && ($d{'max'} > ${$row}[5]));
     }
 
-    unlink("$bssid-$freq.png");
+    my %trk_losses;
+    $sth_trk->execute($bssid, $freq);
+    foreach my $row (@{ $sth_trk->fetchall_arrayref() }) {
+	$trk_losses{${$row}[0]} = ${$row}[1];
+    }
+
+    my @trk_counts;
+    foreach my $tslot (@tslots) {
+	if(exists($trk_losses{$tslot})) {
+	    push(@trk_counts, $trk_losses{$tslot});
+	}
+	else {
+	    push(@trk_counts, 0);
+	}
+    }
+
+    my $fn = "$opts{i}.mupe-$bssid-${freq}kHz.png";
+    unlink($fn);
+
     my $chart = Chart::Gnuplot->new(
-	output => "$bssid-$freq.png",
+	output => $fn,
 	title => "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]",
 	xlabel => 'timeslot (since epoch)',
 	ylabel => 'dBm',
 	y2label => 'dB',
 	y2range => [0, 120],
-	imagesize => '2,2',
+	imagesize => '2,6',
 	bg => 'white',
+    );
+
+    my $chart_signal = Chart::Gnuplot->new(
+	title => "signal distribution",
+	xlabel => 'timeslot (since epoch)',
+	ylabel => 'dBm',
+	y2label => 'dB',
+	y2range => [0, 120],
+	imagesize => '2,2',
 	grid => {
 	    width => 1.
 	},
-	y2tics => {
-	    labels => [0, 10, 20, 30, 40],
+    );
+ 
+   my $chart_jitter = Chart::Gnuplot->new(
+	title => "signal jitter",
+	xlabel => 'timeslot (since epoch)',
+	ylabel => 'dB',
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
+	},
+    );
+
+   my $chart_losses = Chart::Gnuplot->new(
+	title => "beacon losses",
+	xlabel => 'timeslot (since epoch)',
+	ylabel => '#',
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
 	},
     );
 
     my @ds;
-    my @colors = qw(brown green red blue);
+    my @colors = qw(brown green blue);
     foreach my $col (sort keys %data) {
-	my $axes = 'x1y1';
-	$axes = 'x1y2' if($col eq 'MAX(rssi)-MIN(rssi)');
-
 	my $color = shift(@colors);
 	push(@colors, $color);
 
@@ -252,14 +345,54 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq FROM 
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@tslots,
 		ydata => $data{$col},
-		axes => $axes,
-		style => 'lines',
+		style => $opts{'l'},
 		linetype => 1,
 		color => $color,
 		title => $col,
 	    )
 	);
     }
+    $chart_signal->add2d(@ds);
 
-    $chart->plot2d(@ds);
+    $chart_losses->add2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => \@tslots,
+	    ydata => \@trk_counts,
+	    style => 'steps',
+	    linetype => 1,
+	    title => 'missing beacons',
+	)
+    );
+
+    $d{'avg'} /= $#jitter + 1;
+    @ds = (
+	Chart::Gnuplot::DataSet->new(
+	    xdata => \@tslots,
+	    ydata => \@jitter,
+	    style => $opts{'l'},
+	    linetype => 1,
+	    color => 'red',
+	    title => 'jitter',
+	)
+    );
+    foreach my $func (keys %d) {
+	push(@ds,
+	    Chart::Gnuplot::DataSet->new(
+		func => $d{$func},
+		style => 'lines',
+		linetype => 2,
+		color => 'red',
+		width => 2,
+	    )
+	);
+
+	$chart_jitter->label(
+	    text => sprintf(" $func=%2.1fdB", $d{$func}),
+	    position => "first $ts_max, first $d{$func}",
+	    fontcolor => 'red',
+	);
+    }
+    $chart_jitter->add2d(@ds);
+
+    $chart->multiplot([[$chart_signal], [$chart_jitter], [$chart_losses]]);
 }
