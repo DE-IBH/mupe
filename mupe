@@ -157,22 +157,31 @@ sub track_beacon {
     my ($tstamp, $bssid, $freq, $seq) = @_;
 
     my $key = "${bssid}_$freq";
+    my $fn = "$opts{i}.mupe-$bssid-${freq}kHz.missing";
 
     if(exists($beacon_seqs{$key}) && exists($beacon_tstamp{$key})) {
-	my $c = ($beacon_seqs{$key} - $seq) % 0xfff;
+	my $c = ($beacon_seqs{$key} + 1 - $seq) % 0x1000;
 
-	if(($c > 1) && ($c < 50)) {
+	if(($c > 0) && ($c < 50)) {
 	    my $d = ($tstamp - $beacon_tstamp{$key}) / $c;
 	    my $t = $beacon_tstamp{$key};
 
+	    open(HMISSING, ">>$fn");
+	    print HMISSING "$c $t $beacon_seqs{$key} $tstamp $seq\n";
+	    close(HMISSING);
+
 	    print '-';
-	    while(--$c) {
+	    while($c--) {
 		$sth_push_track->execute($t += $d, $bssid, $freq);
 	    }
 	}
     }
+    else {
+	unlink($fn);
+    }
+
     $beacon_tstamp{$key} = $tstamp;
-    $beacon_seqs{$key} = ($seq + 1) % 0xff;
+    $beacon_seqs{$key} = $seq % 0x1000;
 }
 
 my $last_tsamp = 0;
@@ -294,45 +303,45 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 
     my $chart = Chart::Gnuplot->new(
 	output => $fn,
-	title => "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]",
-	xlabel => 'timeslot (since epoch)',
-	ylabel => 'dBm',
-	y2label => 'dB',
-	y2range => [0, 120],
+	title => "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]\\n",
 	imagesize => '2,6',
 	bg => 'white',
     );
 
     my $chart_signal = Chart::Gnuplot->new(
 	title => "signal distribution",
-	xlabel => 'timeslot (since epoch)',
+	xlabel => 'timeslot',
 	ylabel => 'dBm',
-	y2label => 'dB',
-	y2range => [0, 120],
 	imagesize => '2,2',
 	grid => {
 	    width => 1.
 	},
+	timefmt => '"%s"',
+	xdata => 'time',
     );
- 
+
    my $chart_jitter = Chart::Gnuplot->new(
 	title => "signal jitter",
-	xlabel => 'timeslot (since epoch)',
+	xlabel => 'timeslot',
 	ylabel => 'dB',
 	imagesize => '2,2',
 	grid => {
 	    width => 1.
 	},
+	timefmt => '"%s"',
+	xdata => 'time',
     );
 
    my $chart_losses = Chart::Gnuplot->new(
 	title => "beacon losses",
-	xlabel => 'timeslot (since epoch)',
-	ylabel => '#',
+	xlabel => 'timeslot',
+	ylabel => 'count',
 	imagesize => '2,2',
 	grid => {
 	    width => 1.
 	},
+	timefmt => '"%s"',
+	xdata => 'time',
     );
 
     my @ds;
@@ -349,6 +358,7 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 		linetype => 1,
 		color => $color,
 		title => $col,
+		using => '1:2'
 	    )
 	);
     }
@@ -361,6 +371,7 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	    style => 'steps',
 	    linetype => 1,
 	    title => 'missing beacons',
+	    using => '1:2'
 	)
     );
 
@@ -373,6 +384,7 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	    linetype => 1,
 	    color => 'red',
 	    title => 'jitter',
+	    using => '1:2'
 	)
     );
     foreach my $func (keys %d) {
@@ -386,11 +398,11 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	    )
 	);
 
-	$chart_jitter->label(
-	    text => sprintf(" $func=%2.1fdB", $d{$func}),
-	    position => "first $ts_max, first $d{$func}",
-	    fontcolor => 'red',
-	);
+#	$chart_jitter->label(
+#	    text => sprintf(" $func=%2.1fdB", $d{$func}),
+#	    position => "first $ts_max, first $d{$func}",
+#	    fontcolor => 'red',
+#	);
     }
     $chart_jitter->add2d(@ds);
 

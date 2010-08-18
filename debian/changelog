@@ -1,3 +1,11 @@
+mupe (0.3) unstable; urgency=low
+
+  * Make xtics timestamps.
+  * Drop broken labels.
+  * Fix missing beacon calculation.
+
+ -- Thomas Liske <liske@ibh.de>  Wed, 18 Aug 2010 23:55:26 +0200
+
 mupe (0.2) unstable; urgency=low
 
   * Print min/avg/max signal jitter.
