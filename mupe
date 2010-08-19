@@ -249,6 +249,20 @@ sub process_pkt {
     }
 }
 
+sub median(@) {
+    my @s = sort {$a <=> $b} @_;
+    my $n = $#s;
+
+    if($n % 2) {
+	$n++;
+	$n /= 2;
+
+	return (($s[$n - 1] + $s[$n]) / 2);
+    }
+
+    return $s[$n/2];
+}
+
 # Process packets
 print "Reading pcap file";
 $dbh->begin_work;
@@ -269,7 +283,6 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
     my @counts;
     my @jitter;
     my %data;
-    my %d;
     foreach my $row (@{ $sth_qry->fetchall_arrayref() }) {
 	push(@tslots, ${$row}[0]);
 	push(@counts, ${$row}[1]);
@@ -277,9 +290,6 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	push(@{$data{'AVG(rssi)'}}, ${$row}[3]);
 	push(@{$data{'MAX(rssi)'}}, ${$row}[4]);
 	push(@jitter, ${$row}[5]);
-	$d{'avg'} += ${$row}[5];
-	$d{'min'} = ${$row}[5] unless(defined($d{'min'}) && ($d{'min'} < ${$row}[5]));
-	$d{'max'} = ${$row}[5] unless(defined($d{'max'}) && ($d{'max'} > ${$row}[5]));
     }
 
     my %trk_losses;
@@ -359,6 +369,13 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 		color => $color,
 		title => $col,
 		using => '1:2'
+	    ),
+	    Chart::Gnuplot::DataSet->new(
+		func => median(@{$data{$col}}),
+		style => 'lines',
+		linetype => 2,
+		color => $color,
+		width => 3,
 	    )
 	);
     }
@@ -375,7 +392,6 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	)
     );
 
-    $d{'avg'} /= $#jitter + 1;
     @ds = (
 	Chart::Gnuplot::DataSet->new(
 	    xdata => \@tslots,
@@ -385,25 +401,15 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	    color => 'red',
 	    title => 'jitter',
 	    using => '1:2'
+	),
+	Chart::Gnuplot::DataSet->new(
+	    func => median(@jitter),
+	    style => 'lines',
+	    linetype => 2,
+	    color => 'red',
+	    width => 3,
 	)
     );
-    foreach my $func (keys %d) {
-	push(@ds,
-	    Chart::Gnuplot::DataSet->new(
-		func => $d{$func},
-		style => 'lines',
-		linetype => 2,
-		color => 'red',
-		width => 2,
-	    )
-	);
-
-#	$chart_jitter->label(
-#	    text => sprintf(" $func=%2.1fdB", $d{$func}),
-#	    position => "first $ts_max, first $d{$func}",
-#	    fontcolor => 'red',
-#	);
-    }
     $chart_jitter->add2d(@ds);
 
     $chart->multiplot([[$chart_signal], [$chart_jitter], [$chart_losses]]);
