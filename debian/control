@@ -5,11 +5,11 @@ Maintainer: Thomas Liske <liske@ibh.de>
 Build-Depends: debhelper (>= 7.0.50~)
 Standards-Version: 3.8.4
 Homepage: http://micky.ibh.net/~liske/mupe/
-#Vcs-Git: git://git.debian.org/collab-maint/mupe.git
-#Vcs-Browser: http://git.debian.org/?p=collab-maint/mupe.git;a=summary
+Vcs-Git: git://github.com/liske/MuPE.git
+Vcs-Browser: http://github.com/liske/MuPE
 
 Package: mupe
 Architecture: all
 Depends: ${perl:Depends}, libchart-gnuplot-perl, libdbd-sqlite3-perl, libnet-pcap-perl
 Description: MUltiPath Estimator
- .
+ Creates statistical analysis of 802.11 Radiotap sniffs.

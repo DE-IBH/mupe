@@ -1,3 +1,25 @@
+mupe (0.5) unstable; urgency=low
+
+  * Split graphs into induvidual files.
+  * Remove DB files after run.
+  * Change file name schemas.
+
+ -- Thomas Liske <liske@ibh.de>  Fri, 20 Aug 2010 13:06:09 +0200
+
+mupe (0.4b) unstable; urgency=low
+
+  * Fix graph layout.
+  * Support different output formats.
+
+ -- Thomas Liske <liske@ibh.de>  Thu, 19 Aug 2010 15:26:18 +0200
+
+mupe (0.4) unstable; urgency=low
+
+  * Add signal distribution.
+  * Save statistical details to text file.
+
+ -- Thomas Liske <liske@ibh.de>  Thu, 19 Aug 2010 09:31:47 +0200
+
 mupe (0.3b) unstable; urgency=low
 
   * Drop min/avg/max lines.

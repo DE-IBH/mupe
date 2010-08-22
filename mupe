@@ -34,6 +34,7 @@ mupe - MUltiPath Estimator
 mupe <options>
 
  Options:
+   -f <output format>              graph output format (default: png)
    -i <file.pcap>                  pcap input file (required)
    -l <linetype>                   linetype (default: points pt 1)
    -s <BSSID subst>                perl regex subst on BSSIDs (default: s/.$/0/)
@@ -80,6 +81,8 @@ use Net::Pcap;
 use DBI;
 use Chart::Gnuplot;
 use POSIX;
+use List::Util qw(min max sum);
+use File::Basename;
 
 $|++;
 
@@ -115,12 +118,13 @@ my %IEEE80211_RADIOTAP_FIELDLEN = (
 );
 
 my %opts;
-getopts('s:l:t:i:', \%opts);
+getopts('f:s:l:t:i:', \%opts);
 
 HELP_MESSAGE() unless(defined($opts{'i'}));
 
 $opts{'l'} = 'points pt 1' unless(defined($opts{'l'}));
 $opts{'s'} = 's/.$/0/' unless(defined($opts{'s'}));
+$opts{'f'} = 'png' unless(defined($opts{'f'}));
 
 sub HELP_MESSAGE {
     pod2usage(1);
@@ -141,6 +145,8 @@ die "'$opts{i}' not readable!\n" unless(-r $opts{'i'});
 $pcap_t = Net::Pcap::open_offline($opts{'i'}, \$err);
 die "Could not open libpcap: $err\n" unless(defined($pcap_t));
 
+$opts{'i'} = basename($opts{'i'});
+
 my $dbfn = "$opts{i}.mupe.db";
 unlink($dbfn);
 unlink("$dbfn-journal");
@@ -157,7 +163,10 @@ sub track_beacon {
     my ($tstamp, $bssid, $freq, $seq) = @_;
 
     my $key = "${bssid}_$freq";
-    my $fn = "$opts{i}.mupe-$bssid-${freq}kHz.missing";
+
+    my $fn = $opts{'i'};
+    $fn =~ s/\.pcap//;
+    $fn .= ".$bssid-${freq}kHz.missing.txt";
 
     if(exists($beacon_seqs{$key}) && exists($beacon_tstamp{$key})) {
 	my $c = ($beacon_seqs{$key} + 1 - $seq) % 0x1000;
@@ -274,6 +283,8 @@ print "Generating graphs:\n";
 
 my $sth_qry = $dbh->prepare("SELECT CAST((tstamp/$tfactor) AS INT)*$tfactor AS tslot, COUNT(*), MIN(signal), AVG(signal), MAX(signal), MAX(signal) - MIN(signal) FROM beacons WHERE bssid=? AND freq=? GROUP BY tslot");
 my $sth_trk = $dbh->prepare("SELECT CAST((tstamp/$tfactor) AS INT)*$tfactor AS tslot, COUNT(*) FROM track_beacons WHERE bssid=? AND freq=? GROUP BY tslot");
+my $sth_dis = $dbh->prepare("SELECT signal, COUNT(*) FROM beacons WHERE bssid=? AND freq=? GROUP BY signal");
+my $sth_din = $dbh->prepare("SELECT COUNT(*) FROM beacons WHERE bssid=? AND freq=?");
 foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(tstamp), MAX(tstamp) FROM beacons GROUP BY bssid, freq') }) {
     my ($count, $bssid, $freq, $ts_min, $ts_max) = @{$row};
     print " bssid $bssid: $freq kHz, $count beacons\n";
@@ -292,6 +303,22 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	push(@jitter, ${$row}[5]);
     }
 
+    $sth_din->execute($bssid, $freq);
+    my $distri_count = ${${ $sth_din->fetchall_arrayref() }[0]}[0];
+
+    my %distri;
+    $sth_dis->execute($bssid, $freq);
+    foreach my $row (@{ $sth_dis->fetchall_arrayref() }) {
+	$distri{${$row}[0]} = ${$row}[1] * 100 / $distri_count;
+    }
+
+    my @distri_signals;
+    my @distri_counts;
+    foreach my $signal (sort {$a <=> $b} keys %distri) {
+	push(@distri_signals, $signal);
+	push(@distri_counts, $distri{$signal});
+    }
+
     my %trk_losses;
     $sth_trk->execute($bssid, $freq);
     foreach my $row (@{ $sth_trk->fetchall_arrayref() }) {
@@ -308,18 +335,33 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	}
     }
 
-    my $fn = "$opts{i}.mupe-$bssid-${freq}kHz.png";
+    my $tfn = $opts{'i'};
+    $tfn =~ s/\.pcap//;
+    $tfn .= ".$bssid-${freq}kHz.%s.%s";
+
+    my $fn = sprintf $tfn, 'details', 'txt';
+    open(HDETAILS, ">$fn");
+    my $format = "%20s = %s\n";
+    printf HDETAILS $format, 'BSSID', $bssid;
+    printf HDETAILS $format, 'Freq', "$freq kHz";
+    printf HDETAILS $format, 'tslot', "$tfactor";
+
+    print HDETAILS "\n";
+
+    my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
+
+#    my $chart = Chart::Gnuplot->new(
+#	output => $fn,
+#	title => "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]\\n",
+#	imagesize => '2,8',
+#	bg => 'white',
+ #   );
+
+    $fn = sprintf $tfn, 'trend', $opts{'f'};
     unlink($fn);
-
-    my $chart = Chart::Gnuplot->new(
+    my $chart_trend = Chart::Gnuplot->new(
 	output => $fn,
-	title => "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]\\n",
-	imagesize => '2,6',
-	bg => 'white',
-    );
-
-    my $chart_signal = Chart::Gnuplot->new(
-	title => "signal distribution",
+	title => "signal trend\\n$subtitle",
 	xlabel => 'timeslot',
 	ylabel => 'dBm',
 	imagesize => '2,2',
@@ -328,10 +370,14 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	},
 	timefmt => '"%s"',
 	xdata => 'time',
+	bg => 'white',
     );
 
-   my $chart_jitter = Chart::Gnuplot->new(
-	title => "signal jitter",
+    $fn = sprintf $tfn, 'jitter', $opts{'f'};
+    unlink($fn);
+    my $chart_jitter = Chart::Gnuplot->new(
+	output => $fn,
+	title => "signal jitter: $subtitle",
 	xlabel => 'timeslot',
 	ylabel => 'dB',
 	imagesize => '2,2',
@@ -340,18 +386,42 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	},
 	timefmt => '"%s"',
 	xdata => 'time',
+	bg => 'white',
     );
 
-   my $chart_losses = Chart::Gnuplot->new(
-	title => "beacon losses",
+    $fn = sprintf $tfn, 'losses', $opts{'f'};
+    unlink($fn);
+    my @trk_ticks = sort {$a <=> $b} @trk_counts;
+    my $chart_losses = Chart::Gnuplot->new(
+	output => $fn,
+	title => "beacon losses: $subtitle",
 	xlabel => 'timeslot',
 	ylabel => 'count',
+	ytics => \@trk_ticks,
+	yrange => [0, max(0, @trk_counts) + 1],
 	imagesize => '2,2',
 	grid => {
 	    width => 1.
 	},
 	timefmt => '"%s"',
 	xdata => 'time',
+	bg => 'white',
+    );
+
+    $fn = sprintf $tfn, 'distri', $opts{'f'};
+    unlink($fn);
+    my $chart_distri = Chart::Gnuplot->new(
+	output => $fn,
+	title => "signal distribution: $subtitle",
+	xlabel => 'dBm',
+	ylabel => '%',
+	xtics => \@distri_signals,
+	yrange => [0,100],
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
+	},
+	bg => 'white',
     );
 
     my @ds;
@@ -360,6 +430,8 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	my $color = shift(@colors);
 	push(@colors, $color);
 
+	my $median = median(@{$data{$col}});
+	printf HDETAILS $format, "MEDIAN[$col]", "$median dBm";
 	push(@ds,
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@tslots,
@@ -371,7 +443,7 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 		using => '1:2'
 	    ),
 	    Chart::Gnuplot::DataSet->new(
-		func => median(@{$data{$col}}),
+		func => $median,
 		style => 'lines',
 		linetype => 2,
 		color => $color,
@@ -379,20 +451,15 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	    )
 	);
     }
-    $chart_signal->add2d(@ds);
+    $chart_trend->plot2d(@ds);
 
-    $chart_losses->add2d(
-	Chart::Gnuplot::DataSet->new(
-	    xdata => \@tslots,
-	    ydata => \@trk_counts,
-	    style => 'steps',
-	    linetype => 1,
-	    title => 'missing beacons',
-	    using => '1:2'
-	)
-    );
+    print HDETAILS "\n";
 
-    @ds = (
+    my $median_jitter = median(@jitter);
+    printf HDETAILS $format, "MIN[jitter]", min(@jitter).' dB';
+    printf HDETAILS $format, "MEDIAN[jitter]", "$median_jitter dB";
+    printf HDETAILS $format, "MAX[jitter]", max(@jitter).' dB';
+    $chart_jitter->plot2d(
 	Chart::Gnuplot::DataSet->new(
 	    xdata => \@tslots,
 	    ydata => \@jitter,
@@ -403,14 +470,41 @@ foreach my $row (@{ $dbh->selectall_arrayref('SELECT COUNT(*), bssid, freq, MIN(
 	    using => '1:2'
 	),
 	Chart::Gnuplot::DataSet->new(
-	    func => median(@jitter),
+	    func => $median_jitter,
 	    style => 'lines',
 	    linetype => 2,
 	    color => 'red',
 	    width => 3,
 	)
     );
-    $chart_jitter->add2d(@ds);
 
-    $chart->multiplot([[$chart_signal], [$chart_jitter], [$chart_losses]]);
+    print HDETAILS "\n";
+
+    printf HDETAILS $format, "missing beacons", sum(0, @trk_counts);
+    $chart_losses->plot2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => \@tslots,
+	    ydata => \@trk_counts,
+	    style => 'impulses',
+	    width => 5,
+	    linetype => 1,
+	    title => 'missing beacons',
+	    using => '1:2'
+	)
+    );
+
+    $chart_distri->plot2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => \@distri_signals,
+	    ydata => \@distri_counts,
+	    style => 'impulses',
+	    width => 5,
+	    linetype => 1,
+	    using => '1:2'
+	)
+    );
 }
+
+$dbh->disconnect;
+unlink($dbfn);
+unlink("$dbfn-journal");
