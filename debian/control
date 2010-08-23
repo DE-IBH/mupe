@@ -10,6 +10,6 @@ Vcs-Browser: http://github.com/liske/MuPE
 
 Package: mupe
 Architecture: all
-Depends: ${perl:Depends}, libchart-gnuplot-perl, libdbd-sqlite3-perl, libnet-pcap-perl
+Depends: ${perl:Depends}, libchart-gnuplot-perl, libstatistics-descriptive-perl, libnet-pcap-perl
 Description: MUltiPath Estimator
  Creates statistical analysis of 802.11 Radiotap sniffs.

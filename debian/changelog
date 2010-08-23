@@ -1,3 +1,10 @@
+mupe (1.0) unstable; urgency=low
+
+  * Drop SQLite usage.
+  * Require Statistical::Descriptive perl module.
+
+ -- Thomas Liske <liske@ibh.de>  
+
 mupe (0.5) unstable; urgency=low
 
   * Split graphs into induvidual files.
