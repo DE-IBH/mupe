@@ -5,8 +5,8 @@ Maintainer: Thomas Liske <liske@ibh.de>
 Build-Depends: debhelper (>= 7.0.50~)
 Standards-Version: 3.8.4
 Homepage: http://micky.ibh.net/~liske/mupe/
-Vcs-Git: git://github.com/liske/MuPE.git
-Vcs-Browser: http://github.com/liske/MuPE
+Vcs-Git: git://github.com/liske/mupe.git
+Vcs-Browser: http://github.com/liske/mupe
 
 Package: mupe
 Architecture: all
