@@ -150,6 +150,24 @@ $opts{'i'} = basename($opts{'i'});
 
 my $last_tsamp = 0;
 my %beacons;
+sub track_beacon {
+    my ($tstamp, $bssid, $freq, $bssid2, $ts, $bi) = @_;
+
+    if(exists($beacons{$freq}->{$bssid}->{'losses'}->{$bssid2})) {
+	my $sc = $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2};
+
+	# tolerate up to 0.015% clock deviation
+	my $d = $bi/1000000;
+	while($sc->{'tstamp'} + $d < $tstamp - $bi/9999000) {
+	    $d += $bi/1000000;
+	    push(@{$beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}}, $sc->{'tstamp'} + $d);
+	}
+    }
+    $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
+    $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'ts'} = $ts;
+    $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
+}
+
 sub push_beacon {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
@@ -204,18 +222,23 @@ sub process_pkt {
     ### XXX /crude hack XXX ###
 
     # decode IEEE 802.11 Beacon frame
-    my ($type, $flags, $duration, $dst, $src, $bssid, $seq) = unpack('CCna6a6a6v', substr($pkt, $it_len));
+    my ($type, $flags, $duration, $dst, $src, $bssid, $seq, $ts_low, $ts_high, $bi) = unpack('CCna6a6a6vVVv', substr($pkt, $it_len));
 
     $dst = unpack('H12', $dst);
-    $src = unpack('H12', $src);
-    $bssid = unpack('H12', $bssid);
-    $seq >>= 4 if(defined($seq));
 
     # filter for beacons
     if($type == 0x80 && $dst eq 'ffffffffffff') {
+	$src = unpack('H12', $src);
+	$bssid = unpack('H12', $bssid);
+	$seq >>= 4 if(defined($seq));
+	my $ts = $ts_high << 32 | $ts_low;
+	$bi *= 1024;
+
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
+	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
+	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $ts, $bi);
 	push_beacon($tstamp, $bssid, $rt_frequency, $rt_ssi_signal, $rt_ssi_noise);
 
 	print ".";
@@ -459,15 +482,10 @@ sub build_distri() {
     );
 }
 
+sub build_losses() {
+    my ($tfn, $subtitle, $data) = @_;
 
-
-foreach my $freq (keys %beacons) {
-    foreach my $bssid (keys %{$beacons{$freq}}) {
-	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
-	my $ts_min = $beacons{$freq}->{$bssid}->{'tstamps'}->{'min'};
-	my $ts_max = $beacons{$freq}->{$bssid}->{'tstamps'}->{'max'};
-
-	print " bssid $bssid: $freq kHz, $count beacons\n";
+    print Dumper $data->{'losses'};
 
     ### Beacon Losses ###
 #    my %trk_losses;
@@ -485,15 +503,6 @@ foreach my $freq (keys %beacons) {
 #	    push(@trk_counts, 0);
 #	}
 #    }
-
-    my $tfn = $opts{'i'};
-    $tfn =~ s/\.pcap//;
-    $tfn .= ".$bssid-${freq}kHz.%s.%s";
-    my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
-
-    &build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid});
-
-    &build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
 
 #    $fn = sprintf $tfn, 'losses', $opts{'f'};
 #    unlink($fn);
@@ -526,5 +535,27 @@ foreach my $freq (keys %beacons) {
 #	    using => '1:2'
 #	)
 #    );
+}
+
+
+foreach my $freq (keys %beacons) {
+    foreach my $bssid (keys %{$beacons{$freq}}) {
+	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
+	my $ts_min = $beacons{$freq}->{$bssid}->{'tstamps'}->{'min'};
+	my $ts_max = $beacons{$freq}->{$bssid}->{'tstamps'}->{'max'};
+
+	print " bssid $bssid: $freq kHz, $count beacons\n";
+	foreach my $bssid2 (keys %{$beacons{$freq}->{$bssid}->{'losses'}}) {
+	    print "  bssid $bssid2 has ".($#{$beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}}+1)." losses\n";
+	}
+
+	my $tfn = $opts{'i'};
+	$tfn =~ s/\.pcap//;
+	$tfn .= ".$bssid-${freq}kHz.%s.%s";
+	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
+
+	&build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid});
+	&build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
+	&build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
     }
 }
