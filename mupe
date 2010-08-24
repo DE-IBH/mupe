@@ -290,7 +290,7 @@ print "Reading pcap file:\n";
 Net::Pcap::loop($pcap_t, -1, \&process_pkt, 0);
 print "\n";
 
-sub write_stats() {
+sub write_stats {
     my ($fh, $name, $sd) = @_;
 
     printf $fh "%24s = %s\n", "MEAN($name)", $sd->mean();
@@ -307,7 +307,7 @@ sub write_stats() {
     print $fh "\n";
 }
 
-sub build_trend_jitter() {
+sub build_trend_jitter {
     my ($tfn, $subtitle, $data) = @_;
 
     my $fn = sprintf $tfn, 'signal-trend', $opts{'f'};
@@ -428,9 +428,14 @@ sub build_trend_jitter() {
     open(HD, sprintf ">$tfn", 'signal-jitter', 'txt');
     &write_stats(*HD, 'jitter', $sr);
     close(HD);
+
+    return (
+	'signal-trend' => 'beacon frame signal trend',
+	'signal-jitter' => 'beacon frame signal jitter',
+    );
 }
 
-sub build_distri() {
+sub build_distri {
     my ($tfn, $subtitle, $data) = @_;
 
     ### Signal Distribution ###
@@ -469,15 +474,18 @@ sub build_distri() {
 	    xdata => \@distri_signal,
 	    ydata => \@distri_scount,
 	    style => 'boxes',
-	    fill => 1,
-	    width => 5,
+	    fill => '1 border -1',
 	    linetype => 1,
 	    using => '1:2'
 	)
     );
+
+    return (
+	'signal-distri' => 'beacon frame signal distribution',
+    );
 }
 
-sub build_losses() {
+sub build_losses {
     my ($tfn, $subtitle, $data) = @_;
 
     ### Beacon Losses ###
@@ -538,10 +546,14 @@ sub build_losses() {
 	xdata => 'time',
 	bg => 'white',
     )->plot2d(@ds);
+
+    return (
+	'beacon-losses' => 'beacon frame losses',
+    );
 }
 
 
-sub build_sta_trend_jitter() {
+sub build_sta_trend_jitter {
     my ($tfn, $subtitle, $data) = @_;
 
     my $fn = sprintf $tfn, 'signal-trend', $opts{'f'};
@@ -670,15 +682,13 @@ sub build_sta_trend_jitter() {
     &write_stats(*HD, 'jitter', $sr);
     close(HD);
 
-
-
-
-
-
-
+    return (
+	'signal-trend' => 'data frame signal trend',
+	'signal-jitter' => 'data frame signal jitter',
+    );
 }
 
-sub build_sta_distri() {
+sub build_sta_distri {
     my ($tfn, $subtitle, $data) = @_;
 
     ### STA Signal Distribution ###
@@ -723,16 +733,33 @@ sub build_sta_distri() {
 	    xdata => \@distri_signal,
 	    ydata => \@distri_scount,
 	    style => 'boxes',
-	    fill => 1,
-	    width => 5,
+	    fill => '1 border -1',
 	    linetype => 1,
 	    using => '1:2'
 	)
     );
+
+    return (
+	'signal-distri' => 'data frame signal distribution',
+    );
 }
 
+my $fn = $opts{'i'};
+$fn =~ s/\.pcap$//;
+$fn .= ".html";
+
+open(HHTML, ">$fn") || die "Could not open output file '$fn': $!\n";
+print HHTML <<BOH;
+<html>
+<header>
+<title>mupe: $opts{i}</title>
+</header>
+<body>
+<h1>mupe: $opts{i}</h1>
+BOH
 
 print "\nGenerating beacon frame graphs:\n";
+print HHTML "<h2>Beacon frame graphs</h2>\n";
 foreach my $freq (keys %beacons) {
     foreach my $bssid (sort keys %{$beacons{$freq}}) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
@@ -753,14 +780,22 @@ foreach my $freq (keys %beacons) {
 	$tfn =~ s/://g;
 	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
 
-	&build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid});
-	&build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
-	&build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
+	my %links = (
+	    build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
+	    build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
+	    build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
+	);
+	print HHTML "<h3>$bssid</h3>";
+	print HHTML "<ul>\n";
+	foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
+	    print HHTML '<li><a href="'.sprintf($tfn, $k, 'png')."\">$links{$k}</a></li>\n";
+	}
+	print HHTML "</ul>\n";
     }
 }
 
-
 print "\nGenerating data frame graphs:\n";
+print HHTML "<h2>Data frame graphs</h2>\n";
 foreach my $src (sort keys %stas) {
     print " STA $src\n";
 
@@ -770,6 +805,20 @@ foreach my $src (sort keys %stas) {
     $tfn =~ s/://g;
     my $subtitle = "$opts{i} [STA = $src, tslot = ${tfactor}s]";
 
-    &build_sta_trend_jitter($tfn, $subtitle, $stas{$src});
-    &build_sta_distri($tfn, $subtitle, $stas{$src});
+    my %links = (
+	build_sta_trend_jitter($tfn, $subtitle, $stas{$src}),
+	build_sta_distri($tfn, $subtitle, $stas{$src}),
+    );
+
+    print HHTML "<h3>$src</h3>";
+    print HHTML "<ul>\n";
+    foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
+	print HHTML '<li><a href="'.sprintf($tfn, $k, 'png')."\">$links{$k}</a></li>\n";
+    }
+    print HHTML "</ul>\n";
 }
+
+print HHTML <<EOH;
+</body>
+</html>
+EOH
