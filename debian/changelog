@@ -1,7 +1,8 @@
-mupe (1.0) unstable; urgency=low
+mupe (0.9) unstable; urgency=low
 
   * Drop SQLite usage.
   * Require Statistical::Descriptive perl module.
+  * Rewrite beacon tracking & beacon losses code path.
 
  -- Thomas Liske <liske@ibh.de>  
 

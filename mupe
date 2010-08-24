@@ -83,7 +83,6 @@ use Statistics::Descriptive;
 use POSIX;
 use List::Util qw(min max sum);
 use File::Basename;
-use Data::Dumper;
 
 $|++;
 
@@ -141,6 +140,7 @@ if(defined($opts{'t'})) {
 
 my $pcap_t;
 my $err;
+my @colors = qw(brown green blue);
 
 die "'$opts{i}' not readable!\n" unless(-r $opts{'i'});
 $pcap_t = Net::Pcap::open_offline($opts{'i'}, \$err);
@@ -153,26 +153,34 @@ my %beacons;
 sub track_beacon {
     my ($tstamp, $bssid, $freq, $bssid2, $ts, $bi) = @_;
 
-    if(exists($beacons{$freq}->{$bssid}->{'losses'}->{$bssid2})) {
+    if(exists($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2})) {
 	my $sc = $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2};
 
-	# tolerate up to 0.015% clock deviation
+	# tolerate up to 0.03% clock deviation
 	my $d = $bi/1000000;
-	while($sc->{'tstamp'} + $d < $tstamp - $bi/9999000) {
+	while($sc->{'tstamp'} + $d < $tstamp - $bi*3e-8) {
 	    $d += $bi/1000000;
-	    push(@{$beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}}, $sc->{'tstamp'} + $d);
+	
+	    $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2} = Statistics::Descriptive::Full->new()
+		unless(exists($beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}));
+	    $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->add_data($sc->{'tstamp'} + $d);
 	}
+
+	warn "bssid $bssid2 has changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs\n" if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
     }
+    else {
+	$beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
+    }
+
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'ts'} = $ts;
-    $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
 }
 
 sub push_beacon {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
-    my ($tstamp, $bssid, $freq, $signal, $noise) = @_;
+    my ($tstamp, $bssid, $freq, $bssid2, $signal, $noise) = @_;
 
     unless(exists($beacons{$freq}->{$bssid}->{'tstamps'})) {
 	$beacons{$freq}->{$bssid}->{'tstamps'} = Statistics::Descriptive::Full->new();
@@ -183,6 +191,8 @@ sub push_beacon {
     $beacons{$freq}->{$bssid}->{'tstamps'} -> add_data($tstamp);
     $beacons{$freq}->{$bssid}->{'signals'} -> add_data($signal);
     $beacons{$freq}->{$bssid}->{'noises'} -> add_data($noise);
+
+    $beacons{$freq}->{$bssid}->{'counter'} -> {$bssid2}++;
 }
 
 sub process_pkt {
@@ -234,12 +244,14 @@ sub process_pkt {
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
 
+	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
+
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $ts, $bi);
-	push_beacon($tstamp, $bssid, $rt_frequency, $rt_ssi_signal, $rt_ssi_noise);
+	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal, $rt_ssi_noise);
 
 	print ".";
     }
@@ -280,7 +292,7 @@ sub build_trend_jitter() {
     my $i = -1;
     foreach my $tstamp ($data->{'tstamps'}->get_data()) {
 	$i++;
-	my $t = (int($tstamp) - (int($tstamp) % $tfactor)) / $tfactor;
+	my $t = int($tstamp) - (int($tstamp) % $tfactor);
 	push(@tslots, $t) unless($#tslots >= 0 && $tslots[$#tslots] == $t);
 
 	foreach my $param (qw(signals noises)) {
@@ -290,7 +302,6 @@ sub build_trend_jitter() {
     }
 
     my @ds;
-    my @colors = qw(brown green blue);
     my %data = (
 	'min' => 'MIN(signal)',
 	'mean' => 'MEAN(signal)',
@@ -344,6 +355,7 @@ sub build_trend_jitter() {
 	output => $fn,
 	title => "signal trend\\n$subtitle",
 	xlabel => 'timeslot',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
 	imagesize => '2,2',
 	grid => {
@@ -360,8 +372,9 @@ sub build_trend_jitter() {
     my @sr = $sr->get_data();
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "signal jitter: $subtitle",
+	title => "signal jitter\\n$subtitle",
 	xlabel => 'timeslot',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
 	imagesize => '2,2',
 	grid => {
@@ -418,7 +431,7 @@ sub build_distri() {
     unlink($fn);
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "signal distribution: $subtitle",
+	title => "signal distribution\\n$subtitle",
 	xlabel => 'dBm',
 	ylabel => '%',
 	xtics => \@distri_signal,
@@ -432,7 +445,7 @@ sub build_distri() {
 	Chart::Gnuplot::DataSet->new(
 	    xdata => \@distri_signal,
 	    ydata => \@distri_scount,
-	    style => 'impulses',
+	    style => 'boxes',
 	    width => 5,
 	    linetype => 1,
 	    using => '1:2'
@@ -460,7 +473,7 @@ sub build_distri() {
     unlink($fn);
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "noise distribution: $subtitle",
+	title => "noise distribution\\n$subtitle",
 	xlabel => 'dBm',
 	ylabel => '%',
 	xtics => \@distri_noise,
@@ -474,7 +487,7 @@ sub build_distri() {
 	Chart::Gnuplot::DataSet->new(
 	    xdata => \@distri_noise,
 	    ydata => \@distri_ncount,
-	    style => 'impulses',
+	    style => 'boxes',
 	    width => 5,
 	    linetype => 1,
 	    using => '1:2'
@@ -485,73 +498,85 @@ sub build_distri() {
 sub build_losses() {
     my ($tfn, $subtitle, $data) = @_;
 
-    print Dumper $data->{'losses'};
-
     ### Beacon Losses ###
-#    my %trk_losses;
-#    $sth_trk->execute($bssid, $freq);
-#    foreach my $row (@{ $sth_trk->fetchall_arrayref() }) {
-#	$trk_losses{${$row}[0]} = ${$row}[1];
-#    }
-#
-#    my @trk_counts;
-#    foreach my $tslot (@tslots) {
-#	if(exists($trk_losses{$tslot})) {
-#	    push(@trk_counts, $trk_losses{$tslot});
-#	}
-#	else {
-#	    push(@trk_counts, 0);
-#	}
-#    }
+    my @ds;
+    open(HD, sprintf ">$tfn", 'beacon-losses', 'txt');
+    foreach my $bssid2 (keys %{$data->{'losses'}}) {
+	print HD "$bssid2\n";
+	print HD " # beacons = ".$data->{'counter'}->{$bssid2}."\n";
+	print HD " # missing = ".$data->{'losses'}->{$bssid2}->count()."\n\n";
 
-#    $fn = sprintf $tfn, 'losses', $opts{'f'};
-#    unlink($fn);
-#    my @trk_ticks = sort {$a <=> $b} @trk_counts;
-#    my $chart_losses = Chart::Gnuplot->new(
-#	output => $fn,
-#	title => "beacon losses: $subtitle",
-#	xlabel => 'timeslot',
-#	ylabel => 'count',
-#	ytics => \@trk_ticks,
-#	yrange => [0, max(0, @trk_counts) + 1],
-#	imagesize => '2,2',
-#	grid => {
-#	    width => 1.
-#	},
-#	timefmt => '"%s"',
-#	xdata => 'time',
-#	bg => 'white',
-#    );
+	my %data;
+	foreach my $ts ($data->{'losses'}->{$bssid2}->get_data()) {
+	    $data{ int($ts) - (int($ts) % $tfactor) }++;
+	}
 
-#    printf HDETAILS $format, "missing beacons", sum(0, @trk_counts);
-#    $chart_losses->plot2d(
-#	Chart::Gnuplot::DataSet->new(
-#	    xdata => \@tslots,
-#	    ydata => \@trk_counts,
-#	    style => 'impulses',
-#	    width => 5,
-#	    linetype => 1,
-#	    title => 'missing beacons',
-#	    using => '1:2'
-#	)
-#    );
+	my @tslots;
+	my @losses;
+	foreach my $tstamp ($data->{'tstamps'}->get_data()) {
+	    my $ts = int($tstamp) - (int($tstamp) % $tfactor);
+
+	    unless($#tslots >= 0 && $tslots[$#tslots] == $ts) {
+		push(@tslots, $ts) ;
+		push(@losses, $data{$ts});
+	    }
+        }
+
+	my $color = shift(@colors);
+	push(@colors, $color);
+
+	push(@ds,
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@tslots,
+		ydata => \@losses,
+		style => 'impulses',
+		width => 5,
+		linetype => 1,
+		color => $color,
+		title => $bssid2,
+		using => '1:2'
+	    ),
+	);
+    }
+    close(HD);
+
+    my $fn = sprintf $tfn, 'beacon-losses', $opts{'f'};
+    unlink($fn);
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "beacon losses\\n$subtitle",
+	xlabel => 'timeslot',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	ylabel => 'count',
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
+	},
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+    )->plot2d(@ds);
 }
 
 
 foreach my $freq (keys %beacons) {
-    foreach my $bssid (keys %{$beacons{$freq}}) {
+    foreach my $bssid (sort keys %{$beacons{$freq}}) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
 	my $ts_min = $beacons{$freq}->{$bssid}->{'tstamps'}->{'min'};
 	my $ts_max = $beacons{$freq}->{$bssid}->{'tstamps'}->{'max'};
 
-	print " bssid $bssid: $freq kHz, $count beacons\n";
-	foreach my $bssid2 (keys %{$beacons{$freq}->{$bssid}->{'losses'}}) {
-	    print "  bssid $bssid2 has ".($#{$beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}}+1)." losses\n";
+	print " BSSID $bssid @ $freq kHz\n";
+	foreach my $bssid2 (sort keys %{$beacons{$freq}->{$bssid}->{'counter'}}) {
+	    print "  $bssid2 has $beacons{$freq}->{$bssid}->{counter}->{$bssid2}";
+	    print " (", $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->count()," lost)"
+		if(exists($beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}));
+	    print " beacons\n";
 	}
 
 	my $tfn = $opts{'i'};
-	$tfn =~ s/\.pcap//;
+	$tfn =~ s/\.pcap$//;
 	$tfn .= ".$bssid-${freq}kHz.%s.%s";
+	$tfn =~ s/://g;
 	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
 
 	&build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid});
