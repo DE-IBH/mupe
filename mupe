@@ -250,10 +250,10 @@ sub process_pkt {
     my ($type, $flags, $duration, $dst, $src, $bssid, $seq, $ts_low, $ts_high, $bi) = unpack('CCna6a6a6vVVv', substr($pkt, $it_len));
 
     $dst = unpack('H12', $dst);
+    $src = unpack('H12', $src);
 
     # filter for beacons
     if($type == 0x80 && $dst eq 'ffffffffffff') {
-	$src = unpack('H12', $src);
 	$bssid = unpack('H12', $bssid);
 	$seq >>= 4 if(defined($seq));
 	my $ts = $ts_high << 32 | $ts_low;
@@ -270,8 +270,7 @@ sub process_pkt {
 
 	print "b";
     }
-    elsif(($type & 0x0f) == 8) {
-	$src = unpack('H12', $src);
+    elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
 	$bssid = unpack('H12', $bssid);
 	$seq >>= 4 if(defined($seq));
 
@@ -287,7 +286,7 @@ sub process_pkt {
 }
 
 # Process packets
-print "Reading pcap file";
+print "Reading pcap file:\n";
 Net::Pcap::loop($pcap_t, -1, \&process_pkt, 0);
 print "\n";
 
@@ -377,7 +376,7 @@ sub build_trend_jitter() {
 
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "signal trend\\n$subtitle",
+	title => "beacon signal trend\\n$subtitle",
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
@@ -396,7 +395,7 @@ sub build_trend_jitter() {
     my @sr = $sr->get_data();
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "signal jitter\\n$subtitle",
+	title => "beacon signal jitter\\n$subtitle",
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
@@ -455,7 +454,7 @@ sub build_distri() {
     unlink($fn);
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "signal distribution\\n$subtitle",
+	title => "beacon signal distribution\\n$subtitle",
 	xlabel => 'dBm',
 	ylabel => '%',
 	xtics => \@distri_signal,
@@ -470,6 +469,7 @@ sub build_distri() {
 	    xdata => \@distri_signal,
 	    ydata => \@distri_scount,
 	    style => 'boxes',
+#	    fill => 'solid',
 	    width => 5,
 	    linetype => 1,
 	    using => '1:2'
@@ -543,14 +543,231 @@ sub build_losses() {
 
 sub build_sta_trend_jitter() {
     my ($tfn, $subtitle, $data) = @_;
+
+    my $fn = sprintf $tfn, 'signal-trend', $opts{'f'};
+    unlink($fn);
+
+    my %trend;
+    my @tslots;
+    my $sc = Statistics::Descriptive::Full->new();
+    foreach my $freq (keys %{$data}) {
+	foreach my $bssid (keys %{$data->{$freq}}) {
+	    my $i = -1;
+
+	    $sc->add_data(@{$data->{$freq}->{$bssid}->{'signals'}->{'data'}});
+	    foreach my $tstamp ($data->{$freq}->{$bssid}->{'tstamps'}->get_data()) {
+		$i++;
+		my $t = int($tstamp) - (int($tstamp) % $tfactor);
+		push(@tslots, $t) unless($#tslots >= 0 && $tslots[$#tslots] == $t);
+
+		$trend{'signals'}->{$t} = Statistics::Descriptive::Full->new() unless(exists($trend{'signals'}->{$t}));
+		$trend{'signals'}->{$t}->add_data(${$data->{$freq}->{$bssid}->{'signals'}->{'data'}}[$i]);
+	    }
+	}
+    }
+
+    my @ds;
+    my %data = (
+	'min' => 'MIN(signal)',
+	'mean' => 'MEAN(signal)',
+	'max' => 'MAX(signal)',
+    );
+
+    my %ydata;
+    my $sr = Statistics::Descriptive::Full->new();
+    foreach my $t (@tslots) {
+	foreach my $col (sort keys %data) {
+	    push(@{$ydata{$col}}, $trend{'signals'}->{$t}->$col);
+	}
+
+	$sr -> add_data($trend{'signals'}->{$t}->sample_range());
+    }
+
+    open(HD, sprintf ">$tfn", 'signal-trend', 'txt');
+    &write_stats(*HD, 'signal', $sc);
+    foreach my $col (sort keys %data) {
+	my $color = shift(@colors);
+	push(@colors, $color);
+
+	my $stat = Statistics::Descriptive::Full->new();
+	$stat -> add_data(@{$ydata{$col}});
+
+	&write_stats(*HD, $data{$col}, $stat);
+	push(@ds,
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@tslots,
+		ydata => $ydata{$col},
+		style => $opts{'l'},
+		linetype => 1,
+		color => $color,
+		title => $data{$col},
+		using => '1:2'
+	    ),
+	    Chart::Gnuplot::DataSet->new(
+		func => $stat->mean(),
+		style => 'lines',
+		linetype => 3,
+		color => $color,
+		title => "MEAN[$data{$col}]",
+		width => 5,
+	    ),
+	);
+    }
+    close(HD);
+
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "data signal trend\\n$subtitle",
+	xlabel => 'timeslot',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	ylabel => 'dBm',
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
+	},
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+    )->plot2d(@ds);
+
+
+    $fn = sprintf $tfn, 'signal-jitter', $opts{'f'};
+    unlink($fn);
+    my @sr = $sr->get_data();
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "data signal jitter\\n$subtitle",
+	xlabel => 'timeslot',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	ylabel => 'dB',
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
+	},
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+    )->plot2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => \@tslots,
+	    ydata => \@sr,
+	    style => $opts{'l'},
+	    linetype => 1,
+	    color => 'red',
+	    title => 'SR(signal)',
+	    using => '1:2'
+	),
+	Chart::Gnuplot::DataSet->new(
+	    func => $sr->mean(),
+	    style => 'lines',
+	    linetype => 2,
+	    color => 'red',
+	    title => "MEAN[SR(signal)]",
+	    width => 5,
+	),
+    );
+    open(HD, sprintf ">$tfn", 'signal-jitter', 'txt');
+    &write_stats(*HD, 'jitter', $sr);
+    close(HD);
+
+
+
+
+
+
+
 }
 
 sub build_sta_distri() {
     my ($tfn, $subtitle, $data) = @_;
+
+    ### STA Signal Distribution ###
+    my %distri_signals;
+    my %distri;
+    foreach my $freq (keys %{$data}) {
+	foreach my $bssid (keys %{$data->{$freq}}) {
+	    foreach my $signal ($data->{$freq}->{$bssid}->{'signals'}->get_data()) {
+		$distri_signals{$freq}->{$bssid}->{$signal}++;
+		$distri{$signal}++;
+	    }
+	}
+    }
+
+    open(HDISTRI, sprintf(">$tfn", 'signal-distri', 'txt')) || die "Could not open file: $?\n";
+    print HDISTRI "#signal (dBm), count\n";
+    my @distri_signal = sort {$a <=> $b} keys %distri;
+    my @distri_scount;
+    my $count = sum(values %distri);
+    foreach my $signal (@distri_signal) {
+	print HDISTRI "$signal, $distri{$signal}\n";
+	push(@distri_scount, $distri{$signal}*100/$count);
+    }
+
+    my @ds = (
+	Chart::Gnuplot::DataSet->new(
+	    xdata => \@distri_signal,
+	    ydata => \@distri_scount,
+	    style => 'boxes',
+#	    fill => 'solid',
+	    width => 3,
+	    linetype => 1,
+	    color => 'red',
+	    title => 'any',
+	    using => '1:2'
+	)
+    );
+
+    foreach my $freq (keys %{$data}) {
+	foreach my $bssid (keys %{$data->{$freq}}) {
+	    print HDISTRI "\n#$bssid @ ${freq}kHz\n";
+	    print HDISTRI "#signal (dBm), count\n";
+
+	    @distri_signal = sort {$a <=> $b} keys %{$distri_signals{$freq}->{$bssid}};
+	    @distri_scount = ();
+	    $count = sum(values %{$distri_signals{$freq}->{$bssid}});
+	    foreach my $signal (@distri_signal) {
+		print HDISTRI "$signal, $distri_signals{$freq}->{$bssid}->{$signal}\n";
+		push(@distri_scount, $distri_signals{$freq}->{$bssid}->{$signal}*100/$count);
+	    }
+
+	    my $color = shift(@colors);
+	    push(@colors, $color);
+
+	    push(@ds, Chart::Gnuplot::DataSet->new(
+		    xdata => \@distri_signal,
+		    ydata => \@distri_scount,
+		    style => 'impulses',
+		    width => 5,
+		    linetype => 1,
+		    color => $color,
+		    title => "$bssid @ ${freq}kHz",
+		    using => '1:2'
+		)
+	    );
+	}
+    }
+    close(HDISTRI);
+
+
+    my $fn = sprintf $tfn, 'signal-distri', $opts{'f'};
+    unlink($fn);
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "STA data frame signal distribution\\n$subtitle",
+	xlabel => 'dBm',
+	ylabel => '%',
+	xtics => \@distri_signal,
+	yrange => [0,100],
+	imagesize => '2,2',
+	grid => {
+	    width => 1.
+	},
+	bg => 'white',
+    )->plot2d(@ds);
 }
 
 
-print "Generating beacon graphs:\n";
+print "\nGenerating beacon graphs:\n";
 foreach my $freq (keys %beacons) {
     foreach my $bssid (sort keys %{$beacons{$freq}}) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
@@ -578,7 +795,7 @@ foreach my $freq (keys %beacons) {
 }
 
 
-print "Generating STA graphs:\n";
+print "\nGenerating STA graphs:\n";
 foreach my $src (sort keys %stas) {
     print " STA $src\n";
 
