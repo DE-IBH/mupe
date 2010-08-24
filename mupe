@@ -150,6 +150,8 @@ $opts{'i'} = basename($opts{'i'});
 
 my $last_tsamp = 0;
 my %beacons;
+my %stas;
+
 sub track_beacon {
     my ($tstamp, $bssid, $freq, $bssid2, $ts, $bi) = @_;
 
@@ -185,14 +187,27 @@ sub push_beacon {
     unless(exists($beacons{$freq}->{$bssid}->{'tstamps'})) {
 	$beacons{$freq}->{$bssid}->{'tstamps'} = Statistics::Descriptive::Full->new();
 	$beacons{$freq}->{$bssid}->{'signals'} = Statistics::Descriptive::Full->new();
-	$beacons{$freq}->{$bssid}->{'noises'} = Statistics::Descriptive::Full->new();
     }
 
     $beacons{$freq}->{$bssid}->{'tstamps'} -> add_data($tstamp);
     $beacons{$freq}->{$bssid}->{'signals'} -> add_data($signal);
-    $beacons{$freq}->{$bssid}->{'noises'} -> add_data($noise);
 
     $beacons{$freq}->{$bssid}->{'counter'} -> {$bssid2}++;
+}
+
+sub push_data {
+    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
+    $last_tsamp = $_[0];
+
+    my ($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal, $rt_ssi_noise) = @_;
+
+    unless(exists($stas{$src}->{$rt_frequency}->{$bssid})) {
+	$stas{$src}->{$rt_frequency}->{$bssid}->{'tstamps'} = Statistics::Descriptive::Full->new();
+	$stas{$src}->{$rt_frequency}->{$bssid}->{'signals'} = Statistics::Descriptive::Full->new();
+    }
+
+    $stas{$src}->{$rt_frequency}->{$bssid}->{'tstamps'} -> add_data($tstamp);
+    $stas{$src}->{$rt_frequency}->{$bssid}->{'signals'} -> add_data($rt_ssi_signal);
 }
 
 sub process_pkt {
@@ -253,7 +268,21 @@ sub process_pkt {
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $ts, $bi);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal, $rt_ssi_noise);
 
-	print ".";
+	print "b";
+    }
+    elsif(($type & 0x0f) == 8) {
+	$src = unpack('H12', $src);
+	$bssid = unpack('H12', $bssid);
+	$seq >>= 4 if(defined($seq));
+
+	$src =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
+	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
+
+	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
+
+	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal, $rt_ssi_noise);
+
+	print "d";
     }
 }
 
@@ -261,8 +290,6 @@ sub process_pkt {
 print "Reading pcap file";
 Net::Pcap::loop($pcap_t, -1, \&process_pkt, 0);
 print "\n";
-
-print "Generating graphs:\n";
 
 sub write_stats() {
     my ($fh, $name, $sd) = @_;
@@ -295,10 +322,8 @@ sub build_trend_jitter() {
 	my $t = int($tstamp) - (int($tstamp) % $tfactor);
 	push(@tslots, $t) unless($#tslots >= 0 && $tslots[$#tslots] == $t);
 
-	foreach my $param (qw(signals noises)) {
-	    $trend{$param}->{$t} = Statistics::Descriptive::Full->new() unless(exists($trend{$param}->{$t}));
-	    $trend{$param}->{$t}->add_data(${$data->{$param}->{'data'}}[$i]);
-	}
+	$trend{'signals'}->{$t} = Statistics::Descriptive::Full->new() unless(exists($trend{'signals'}->{$t}));
+	$trend{'signals'}->{$t}->add_data(${$data->{'signals'}->{'data'}}[$i]);
     }
 
     my @ds;
@@ -320,7 +345,6 @@ sub build_trend_jitter() {
 
     open(HD, sprintf ">$tfn", 'signal-trend', 'txt');
     &write_stats(*HD, 'signal', $data->{'signals'});
-    &write_stats(*HD, 'noise', $data->{'noises'});
     foreach my $col (sort keys %data) {
 	my $color = shift(@colors);
 	push(@colors, $color);
@@ -451,48 +475,6 @@ sub build_distri() {
 	    using => '1:2'
 	)
     );
-
-    ### Noise Distribution ###
-    my %distri_noises;
-    foreach my $noise ($data->{'noises'}->get_data()) {
-	$distri_noises{$noise}++;
-    }
-
-    open(HDISTRI, sprintf(">$tfn", 'noise-distri', 'txt')) || die "Could not open file: $?\n";
-    print HDISTRI "#noise (dBm), count\n";
-    my @distri_noise;
-    my @distri_ncount;
-    foreach my $noise (sort {$a <=> $b} keys %distri_noises) {
-	print HDISTRI "$noise, $distri_noises{$noise}\n";
-	push(@distri_noise, $noise);
-	push(@distri_ncount, $distri_noises{$noise}*100/$data->{'noises'}->count());
-    }
-    close(HDISTRI);
-
-    $fn = sprintf $tfn, 'noise-distri', $opts{'f'};
-    unlink($fn);
-    Chart::Gnuplot->new(
-	output => $fn,
-	title => "noise distribution\\n$subtitle",
-	xlabel => 'dBm',
-	ylabel => '%',
-	xtics => \@distri_noise,
-	yrange => [0,100],
-	imagesize => '2,2',
-	grid => {
-	    width => 1.
-	},
-	bg => 'white',
-    )->plot2d(
-	Chart::Gnuplot::DataSet->new(
-	    xdata => \@distri_noise,
-	    ydata => \@distri_ncount,
-	    style => 'boxes',
-	    width => 5,
-	    linetype => 1,
-	    using => '1:2'
-	)
-    );
 }
 
 sub build_losses() {
@@ -559,6 +541,16 @@ sub build_losses() {
 }
 
 
+sub build_sta_trend_jitter() {
+    my ($tfn, $subtitle, $data) = @_;
+}
+
+sub build_sta_distri() {
+    my ($tfn, $subtitle, $data) = @_;
+}
+
+
+print "Generating beacon graphs:\n";
 foreach my $freq (keys %beacons) {
     foreach my $bssid (sort keys %{$beacons{$freq}}) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
@@ -575,7 +567,7 @@ foreach my $freq (keys %beacons) {
 
 	my $tfn = $opts{'i'};
 	$tfn =~ s/\.pcap$//;
-	$tfn .= ".$bssid-${freq}kHz.%s.%s";
+	$tfn .= ".BSSID-$bssid-${freq}kHz.%s.%s";
 	$tfn =~ s/://g;
 	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
 
@@ -583,4 +575,19 @@ foreach my $freq (keys %beacons) {
 	&build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
 	&build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid});
     }
+}
+
+
+print "Generating STA graphs:\n";
+foreach my $src (sort keys %stas) {
+    print " STA $src\n";
+
+    my $tfn = $opts{'i'};
+    $tfn =~ s/\.pcap$//;
+    $tfn .= ".STA-$src.%s.%s";
+    $tfn =~ s/://g;
+    my $subtitle = "$opts{i} [STA = $src, tslot = ${tfactor}s]";
+
+    &build_sta_trend_jitter($tfn, $subtitle, $stas{$src});
+    &build_sta_distri($tfn, $subtitle, $stas{$src});
 }
