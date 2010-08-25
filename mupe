@@ -502,11 +502,16 @@ sub build_losses {
 
     ### Beacon Losses ###
     my @ds;
+    my $z = 0;
+    my $max = 1;
     open(HD, sprintf ">$tfn", 'beacon-losses', 'txt');
-    foreach my $bssid2 (keys %{$data->{'losses'}}) {
+    my @bssid2 = sort keys %{$data->{'losses'}};
+    foreach my $bssid2 (@bssid2) {
+	$z++;
 	print HD "$bssid2\n";
 	print HD " # beacons = ".$data->{'counter'}->{$bssid2}."\n";
-	print HD " # missing = ".$data->{'losses'}->{$bssid2}->count()."\n\n";
+	print HD " # missing = ".$data->{'losses'}->{$bssid2}->count()."\n";
+	printf HD " loss rate = %.2f%%\n\n", ($data->{'losses'}->{$bssid2}->count() * 100 / $data->{'counter'}->{$bssid2});
 
 	my %data;
 	foreach my $ts ($data->{'losses'}->{$bssid2}->get_data()) {
@@ -515,12 +520,20 @@ sub build_losses {
 
 	my @tslots;
 	my @losses;
+	my @bssids;
 	foreach my $tstamp ($data->{'tstamps'}->get_data()) {
 	    my $ts = int($tstamp) - (int($tstamp) % $tfactor);
 
 	    unless($#tslots >= 0 && $tslots[$#tslots] == $ts) {
 		push(@tslots, $ts) ;
-		push(@losses, $data{$ts});
+		push(@bssids, $z);
+		if(exists($data{$ts})) {
+		    push(@losses, $data{$ts});
+		    $max = $data{$ts} + 1 if($max <= $data{$ts});
+		}
+		else {
+		    push(@losses, 0);
+		}
 	    }
         }
 
@@ -530,13 +543,14 @@ sub build_losses {
 	push(@ds,
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@tslots,
-		ydata => \@losses,
+		ydata => \@bssids,
+		zdata => \@losses,
 		style => 'impulses',
 		width => 5,
 		linetype => 1,
 		color => $color,
 		title => $bssid2,
-		using => '1:2'
+		using => '1:2:3'
 	    ),
 	);
     }
@@ -550,7 +564,12 @@ sub build_losses {
 	    title => "beacon frame losses\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
-	    ylabel => 'count',
+	    ylabel => 'bssid',
+	    yrange => [0.5,$z+0.5],
+	    ytics => undef,
+	    zrange => [0,$max],
+	    ztics => [0..$max],
+	    xyplane => 'at 0',
 	    imagesize => '2,2',
 	    grid => {
 		width => 1.
@@ -558,7 +577,7 @@ sub build_losses {
 	    timefmt => '"%s"',
 	    xdata => 'time',
 	    bg => 'white',
-	)->plot2d(@ds);
+	)->plot3d(@ds);
 
 	return (
 	    'beacon-losses' => 'beacon frame losses',
