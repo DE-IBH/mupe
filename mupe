@@ -151,6 +151,8 @@ $opts{'i'} = basename($opts{'i'});
 my $last_tsamp = 0;
 my %beacons;
 my %stas;
+my %preq;
+my %pres;
 
 sub track_beacon {
     my ($tstamp, $bssid, $freq, $bssid2, $ts, $bi) = @_;
@@ -247,17 +249,22 @@ sub process_pkt {
     ### XXX /crude hack XXX ###
 
     # decode IEEE 802.11 Beacon frame
-    my ($type, $flags, $duration, $dst, $src, $bssid, $seq, $ts_low, $ts_high, $bi) = unpack('CCna6a6a6vVVv', substr($pkt, $it_len));
+    my ($type, $flags, $duration, $dst, $src, $bssid, $seq) = unpack('CCna6a6a6v', substr($pkt, $it_len));
 
     $dst = unpack('H12', $dst);
     $src = unpack('H12', $src);
 
-    # filter for beacons
-    if($type == 0x80 && $dst eq 'ffffffffffff') {
+    # beacon frame
+    if($type == 0x80) {
+	my ($ts_low, $ts_high, $bi) = unpack('VVv', substr($pkt, $it_len + 0x18));
+
 	$bssid = unpack('H12', $bssid);
 	$seq >>= 4 if(defined($seq));
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
+
+	warn "Unexpected dst=$dst in beacon of bssid=$bssid!\n" unless($dst eq 'ffffffffffff');
+	warn "Unexpected src<>bssid ($src<>$bssid) in beacon!\n" unless($src eq $bssid);
 
 	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
 
@@ -270,6 +277,10 @@ sub process_pkt {
 
 	print "b";
     }
+    # probe request/response frame
+    elsif($type == 0x40 || $type == 0x50) {
+    }
+    # data frame
     elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
 	$bssid = unpack('H12', $bssid);
 	$seq >>= 4 if(defined($seq));
@@ -530,26 +541,30 @@ sub build_losses {
     }
     close(HD);
 
-    my $fn = sprintf $tfn, 'beacon-losses', $opts{'f'};
-    unlink($fn);
-    Chart::Gnuplot->new(
-	output => $fn,
-	title => "beacon frame losses\\n$subtitle",
-	xlabel => 'timeslot',
-#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
-	ylabel => 'count',
-	imagesize => '2,2',
-	grid => {
-	    width => 1.
-	},
-	timefmt => '"%s"',
-	xdata => 'time',
-	bg => 'white',
-    )->plot2d(@ds);
+    if($#ds >= 0) {
+	my $fn = sprintf $tfn, 'beacon-losses', $opts{'f'};
+	unlink($fn);
+	Chart::Gnuplot->new(
+	    output => $fn,
+	    title => "beacon frame losses\\n$subtitle",
+	    xlabel => 'timeslot',
+#		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	    ylabel => 'count',
+	    imagesize => '2,2',
+	    grid => {
+		width => 1.
+	    },
+	    timefmt => '"%s"',
+	    xdata => 'time',
+	    bg => 'white',
+	)->plot2d(@ds);
 
-    return (
-	'beacon-losses' => 'beacon frame losses',
-    );
+	return (
+	    'beacon-losses' => 'beacon frame losses',
+	);
+    }
+
+    return ();
 }
 
 
