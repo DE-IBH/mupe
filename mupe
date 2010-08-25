@@ -474,8 +474,9 @@ sub build_distri {
 	xlabel => 'dBm',
 	ylabel => '%',
 	xtics => \@distri_signal,
+	xrange => [-96,-20],
 	yrange => [0,100],
-	imagesize => '2,2',
+	imagesize => '3,2',
 	grid => {
 	    width => 1.
 	},
@@ -737,8 +738,9 @@ sub build_sta_distri {
 	xlabel => 'dBm',
 	ylabel => '%',
 	xtics => \@distri_signal,
+	xrange => [-96,-20],
 	yrange => [0,100],
-	imagesize => '2,2',
+	imagesize => '3,2',
 	grid => {
 	    width => 1.
 	},
