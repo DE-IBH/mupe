@@ -513,7 +513,7 @@ sub build_losses {
 	print HD "$bssid2\n";
 	print HD " # beacons = ".$data->{'counter'}->{$bssid2}."\n";
 	print HD " # missing = ".$data->{'losses'}->{$bssid2}->count()."\n";
-	printf HD " loss rate = %.2f%%\n\n", ($data->{'losses'}->{$bssid2}->count() * 100 / $data->{'counter'}->{$bssid2});
+	printf HD " loss rate = %.2f%%\n\n", (($data->{'losses'}->{$bssid2}->count() + $data->{'counter'}->{$bssid2}) * 100 / $data->{'counter'}->{$bssid2});
 
 	my %data;
 	foreach my $ts ($data->{'losses'}->{$bssid2}->get_data()) {
