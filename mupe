@@ -571,17 +571,18 @@ sub build_losses {
 		linetype => 1,
 		color => 'red',
 		title => "losses $bssid2",
-		using => '1:2'
+		using => '1:2',
 	    ),
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@tslots,
-		y2data => \@beacons,
-		style => 'impulses',
+		ydata => \@beacons,
+		style => 'lines',
 		width => 5,
 		linetype => 1,
 		color => 'dark-green',
 		title => "beacons $bssid2",
-		using => '1:2'
+		using => '1:2',
+		axes => 'x1y2',
 	    ),
 	);
 

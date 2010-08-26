@@ -3,6 +3,11 @@ mupe (0.9) unstable; urgency=low
   * Drop SQLite usage.
   * Require Statistical::Descriptive perl module.
   * Rewrite beacon tracking & beacon losses code path.
+  * Add beacon rate to loss chart.
+  * Switch to filename friendly MAC address format.
+  * Generate html file linking charts.
+  * Add data frame analysis.
+  * Many minor improvements.
 
  -- Thomas Liske <liske@ibh.de>  
 
