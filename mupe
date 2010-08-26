@@ -178,6 +178,7 @@ sub track_beacon {
 	$beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
     }
 
+    push(@{$beacons{$freq}->{$bssid}->{'beacons'}->{$bssid2}}, $tstamp);
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'ts'} = $ts;
 }
@@ -268,7 +269,7 @@ sub process_pkt {
 	warn "Unexpected dst=$dst in beacon of bssid=$bssid!\n" unless($dst eq 'ffffffffffff');
 	warn "Unexpected src<>bssid ($src<>$bssid) in beacon!\n" unless($src eq $bssid);
 
-	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
+	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1$2.$3$4.$5$6/;
 
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 	my $bssid2 = $bssid;
@@ -287,8 +288,8 @@ sub process_pkt {
 	$bssid = unpack('H12', $bssid);
 	$seq >>= 4 if(defined($seq));
 
-	$src =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
-	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1:$2:$3:$4:$5:$6/;
+	$src =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1$2.$3$4.$5$6/;
+	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1$2.$3$4.$5$6/;
 
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 
@@ -504,12 +505,10 @@ sub build_losses {
 
     ### Beacon Losses ###
     my @ds;
-    my $z = 0;
-    my $max = 1;
     open(HD, sprintf ">$tfn", 'beacon-losses', 'txt');
     my @bssid2 = sort keys %{$data->{'losses'}};
+    my %res;
     foreach my $bssid2 (@bssid2) {
-	$z++;
 	print HD "$bssid2\n";
 	print HD " # beacons = ".$data->{'counter'}->{$bssid2}."\n";
 	print HD " # missing = ".$data->{'losses'}->{$bssid2}->count()."\n";
@@ -520,58 +519,42 @@ sub build_losses {
 	    $data{ int($ts) - (int($ts) % $tfactor) }++;
 	}
 
+	my %bdata;
+	foreach my $ts (@{$data->{'beacons'}->{$bssid2}}) {
+	    $bdata{ int($ts) - (int($ts) % $tfactor) }++;
+	}
+
 	my @tslots;
 	my @losses;
-	my @bssids;
+	my @beacons;
 	foreach my $tstamp ($data->{'tstamps'}->get_data()) {
 	    my $ts = int($tstamp) - (int($tstamp) % $tfactor);
 
 	    unless($#tslots >= 0 && $tslots[$#tslots] == $ts) {
 		push(@tslots, $ts) ;
-		push(@bssids, $z);
 		if(exists($data{$ts})) {
 		    push(@losses, $data{$ts});
-		    $max = $data{$ts} + 1 if($max <= $data{$ts});
 		}
 		else {
 		    push(@losses, 0);
 		}
+
+		if(exists($bdata{$ts})) {
+		    push(@beacons, $bdata{$ts});
+		}
+		else {
+		    push(@beacons, 0);
+		}
 	    }
         }
 
-	my $color = shift(@colors);
-	push(@colors, $color);
-
-	push(@ds,
-	    Chart::Gnuplot::DataSet->new(
-		xdata => \@tslots,
-		ydata => \@bssids,
-		zdata => \@losses,
-		style => 'impulses',
-		width => 5,
-		linetype => 1,
-		color => $color,
-		title => $bssid2,
-		using => '1:2:3'
-	    ),
-	);
-    }
-    close(HD);
-
-    if($#ds >= 0) {
-	my $fn = sprintf $tfn, 'beacon-losses', $opts{'f'};
+	my $fn = sprintf $tfn, "beacon-losses.$bssid2", $opts{'f'};
 	unlink($fn);
 	Chart::Gnuplot->new(
 	    output => $fn,
 	    title => "beacon frame losses\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
-	    ylabel => 'bssid',
-	    yrange => [0.5,$z+0.5],
-	    ytics => undef,
-	    zrange => [0,$max],
-	    ztics => [0..$max],
-	    xyplane => 'at 0',
 	    imagesize => $chart_dim,
 	    grid => {
 		width => 1.
@@ -579,14 +562,34 @@ sub build_losses {
 	    timefmt => '"%s"',
 	    xdata => 'time',
 	    bg => 'white',
-	)->plot3d(@ds);
-
-	return (
-	    'beacon-losses' => 'beacon frame losses',
+	)->plot2d(
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@tslots,
+		ydata => \@losses,
+		style => 'impulses',
+		width => 5,
+		linetype => 1,
+		color => 'red',
+		title => "losses $bssid2",
+		using => '1:2'
+	    ),
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@tslots,
+		y2data => \@beacons,
+		style => 'impulses',
+		width => 5,
+		linetype => 1,
+		color => 'dark-green',
+		title => "beacons $bssid2",
+		using => '1:2'
+	    ),
 	);
-    }
 
-    return ();
+	$res{"beacon-losses.$bssid2"} = "$bssid2 beacon frame losses",
+    }
+    close(HD);
+
+    return %res;
 }
 
 
@@ -838,7 +841,6 @@ foreach my $freq (keys %beacons) {
 	my $tfn = $opts{'i'};
 	$tfn =~ s/\.pcap$//;
 	$tfn .= ".BSSID-$bssid-${freq}kHz.%s.%s";
-	$tfn =~ s/://g;
 	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
 
 	my %links = (
@@ -855,9 +857,13 @@ foreach my $freq (keys %beacons) {
 	    print HHTML "<li><a href=\"javascript:toggle('$txt')\">$links{$k}</a>\n";
 	    print HHTML "<div id=\"$txt\" style=\"display: none;\">\n";
 	    print HHTML "<p><a href=\"$png\"><img src=\"$png\" alt=\"$links{$k}\" border=\"0\" height=\"80%\" width=\"80%\"/></a></p><pre>\n";
-	    open(HPRE, $txt);
-	    print HHTML join('', <HPRE>);
-	    close(HPRE);
+	    if (open(HPRE, $txt)) {
+		print HHTML join('', <HPRE>);
+		close(HPRE);
+	    }
+	    else {
+		print HHTML '&nbsp;';
+	    }
 	    print HHTML "</pre>\n";
 	    print HHTML "</div></li>\n"
 	}
@@ -873,7 +879,6 @@ foreach my $src (sort keys %stas) {
     my $tfn = $opts{'i'};
     $tfn =~ s/\.pcap$//;
     $tfn .= ".STA-$src.%s.%s";
-    $tfn =~ s/://g;
     my $subtitle = "$opts{i} [STA = $src, tslot = ${tfactor}s]";
 
     my %links = (
