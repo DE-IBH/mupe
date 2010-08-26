@@ -126,6 +126,9 @@ $opts{'l'} = 'points pt 1' unless(defined($opts{'l'}));
 $opts{'s'} = 's/.$/0/' unless(defined($opts{'s'}));
 $opts{'f'} = 'png' unless(defined($opts{'f'}));
 
+my $min_samples = 10;
+my $chart_dim = '3,2';
+
 sub HELP_MESSAGE {
     pod2usage(1);
 }
@@ -391,7 +394,7 @@ sub build_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
-	imagesize => '3,2',
+	imagesize => $chart_dim,
 	grid => {
 	    width => 1.
 	},
@@ -410,7 +413,7 @@ sub build_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
-	imagesize => '3,2',
+	imagesize => $chart_dim,
 	grid => {
 	    width => 1.
 	},
@@ -476,7 +479,7 @@ sub build_distri {
 	xtics => \@distri_signal,
 	xrange => [-96,-20],
 	yrange => [0,100],
-	imagesize => '3,2',
+	imagesize => $chart_dim,
 	grid => {
 	    width => 1.
 	},
@@ -570,7 +573,7 @@ sub build_losses {
 	    zrange => [0,$max],
 	    ztics => [0..$max],
 	    xyplane => 'at 0',
-	    imagesize => '3,2',
+	    imagesize => $chart_dim,
 	    grid => {
 		width => 1.
 	    },
@@ -611,6 +614,11 @@ sub build_sta_trend_jitter {
 		$trend{'signals'}->{$t}->add_data(${$data->{$freq}->{$bssid}->{'signals'}->{'data'}}[$i]);
 	    }
 	}
+    }
+
+    if($sc->count() < $min_samples) {
+	print "  ignoring - less than $min_samples samples\n";
+	return ();
     }
 
     my @ds;
@@ -668,7 +676,7 @@ sub build_sta_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
-	imagesize => '3,2',
+	imagesize => $chart_dim,
 	grid => {
 	    width => 1.
 	},
@@ -687,7 +695,7 @@ sub build_sta_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
-	imagesize => '3,2',
+	imagesize => $chart_dim,
 	grid => {
 	    width => 1.
 	},
@@ -738,6 +746,8 @@ sub build_sta_distri {
 	}
     }
 
+    return () if($count < $min_samples);
+
     open(HDISTRI, sprintf(">$tfn", 'signal-distri', 'txt')) || die "Could not open file: $?\n";
     print HDISTRI "#signal (dBm), count\n";
     my @distri_signal;
@@ -759,7 +769,7 @@ sub build_sta_distri {
 	xtics => \@distri_signal,
 	xrange => [-96,-20],
 	yrange => [0,100],
-	imagesize => '3,2',
+	imagesize => $chart_dim,
 	grid => {
 	    width => 1.
 	},
@@ -801,6 +811,11 @@ foreach my $freq (keys %beacons) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
 	my $ts_min = $beacons{$freq}->{$bssid}->{'tstamps'}->{'min'};
 	my $ts_max = $beacons{$freq}->{$bssid}->{'tstamps'}->{'max'};
+
+	if($count < $min_samples) {
+	    print " ignoring BSSID $bssid @ ${freq}kHz - less than $min_samples samples\n";
+	    next;
+	}
 
 	print " BSSID $bssid @ $freq kHz\n";
 	foreach my $bssid2 (sort keys %{$beacons{$freq}->{$bssid}->{'counter'}}) {
