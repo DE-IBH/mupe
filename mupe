@@ -824,7 +824,9 @@ foreach my $freq (keys %beacons) {
 	print HHTML "<h3>$bssid</h3>";
 	print HHTML "<ul>\n";
 	foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
-	    print HHTML '<li><a href="'.sprintf($tfn, $k, 'png')."\">$links{$k}</a></li>\n";
+	    print HHTML "<li>$links{$k}: ";
+	    print HHTML join(', ', map { /\.([^.]+)$/; "<a href=\"$_\">$1</a>" } sort glob sprintf($tfn, $k, '*'));
+	    print HHTML "</li>\n";
 	}
 	print HHTML "</ul>\n";
     }
@@ -849,7 +851,9 @@ foreach my $src (sort keys %stas) {
     print HHTML "<h3>$src</h3>";
     print HHTML "<ul>\n";
     foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
-	print HHTML '<li><a href="'.sprintf($tfn, $k, 'png')."\">$links{$k}</a></li>\n";
+	print HHTML "<li>$links{$k}: ";
+	print HHTML join(', ', map { /\.([^.]+)$/; "<a href=\"$_\">$1</a>" } sort glob sprintf($tfn, $k, '*'));
+	print HHTML "</li>\n";
     }
     print HHTML "</ul>\n";
 }
