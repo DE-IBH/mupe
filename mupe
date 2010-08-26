@@ -145,7 +145,6 @@ my $pcap_t;
 my $err;
 my @colors = qw(brown green blue);
 
-die "'$opts{i}' not readable!\n" unless(-r $opts{'i'});
 $pcap_t = Net::Pcap::open_offline($opts{'i'}, \$err);
 die "Could not open libpcap: $err\n" unless(defined($pcap_t));
 
