@@ -799,6 +799,17 @@ print HHTML <<BOH;
 <html>
 <header>
 <title>mupe: $opts{i}</title>
+<script language="javascript"> 
+    function toggle(elName) {
+	var ele = document.getElementById(elName);
+	if(ele.style.display == "block") {
+	    ele.style.display = "none";
+	}
+	else {
+	    ele.style.display = "block";
+	}
+}
+</script>
 </header>
 <body>
 <h1>mupe: $opts{i}</h1>
@@ -836,12 +847,20 @@ foreach my $freq (keys %beacons) {
 	    build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
 	    build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
 	);
+
 	print HHTML "<h3>$bssid</h3>";
-	print HHTML "<ul>\n";
 	foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
-	    print HHTML "<li>$links{$k}: ";
-	    print HHTML join(', ', map { /\.([^.]+)$/; "<a href=\"$_\">$1</a>" } sort glob sprintf($tfn, $k, '*'));
-	    print HHTML "</li>\n";
+	    my $png = sprintf($tfn, $k, 'png');
+	    my $txt = sprintf($tfn, $k, 'txt');
+
+	    print HHTML "<li><a href=\"javascript:toggle('$txt')\">$links{$k}</a>\n";
+	    print HHTML "<div id=\"$txt\" style=\"display: none;\">\n";
+	    print HHTML "<p><a href=\"$png\"><img src=\"$png\" alt=\"$links{$k}\" border=\"0\" height=\"80%\" width=\"80%\"/></a></p><pre>\n";
+	    open(HPRE, $txt);
+	    print HHTML join('', <HPRE>);
+	    close(HPRE);
+	    print HHTML "</pre>\n";
+	    print HHTML "</div></li>\n"
 	}
 	print HHTML "</ul>\n";
     }
@@ -863,12 +882,19 @@ foreach my $src (sort keys %stas) {
 	build_sta_distri($tfn, $subtitle, $stas{$src}),
     );
 
-    print HHTML "<h3>$src</h3>";
-    print HHTML "<ul>\n";
+    print HHTML "<h3>$src</h3><ul>";
     foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
-	print HHTML "<li>$links{$k}: ";
-	print HHTML join(', ', map { /\.([^.]+)$/; "<a href=\"$_\">$1</a>" } sort glob sprintf($tfn, $k, '*'));
-	print HHTML "</li>\n";
+	my $png = sprintf($tfn, $k, 'png');
+	my $txt = sprintf($tfn, $k, 'txt');
+
+	print HHTML "<li><a href=\"javascript:toggle('$txt')\">$links{$k}</a>\n";
+	print HHTML "<div id=\"$txt\" style=\"display: none;\">\n";
+	print HHTML "<p><a href=\"$png\"><img src=\"$png\" alt=\"$links{$k}\" border=\"0\" height=\"80%\" width=\"80%\"/></a></p><pre>\n";
+	open(HPRE, $txt);
+	print HHTML join('', <HPRE>);
+	close(HPRE);
+	print HHTML "</pre>\n";
+	print HHTML "</div></li>\n"
     }
     print HHTML "</ul>\n";
 }
