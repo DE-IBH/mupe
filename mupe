@@ -391,7 +391,7 @@ sub build_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
-	imagesize => '2,2',
+	imagesize => '3,2',
 	grid => {
 	    width => 1.
 	},
@@ -410,7 +410,7 @@ sub build_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
-	imagesize => '2,2',
+	imagesize => '3,2',
 	grid => {
 	    width => 1.
 	},
@@ -570,7 +570,7 @@ sub build_losses {
 	    zrange => [0,$max],
 	    ztics => [0..$max],
 	    xyplane => 'at 0',
-	    imagesize => '2,2',
+	    imagesize => '3,2',
 	    grid => {
 		width => 1.
 	    },
@@ -668,7 +668,7 @@ sub build_sta_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
-	imagesize => '2,2',
+	imagesize => '3,2',
 	grid => {
 	    width => 1.
 	},
@@ -687,7 +687,7 @@ sub build_sta_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
-	imagesize => '2,2',
+	imagesize => '3,2',
 	grid => {
 	    width => 1.
 	},
