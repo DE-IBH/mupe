@@ -128,6 +128,7 @@ $opts{'f'} = 'png' unless(defined($opts{'f'}));
 
 my $min_samples = 10;
 my $chart_dim = '3,2';
+my @colors = qw(brown green blue);
 
 sub HELP_MESSAGE {
     pod2usage(1);
@@ -143,7 +144,7 @@ if(defined($opts{'t'})) {
 
 my $pcap_t;
 my $err;
-my @colors = qw(brown green blue);
+my %warnings;
 
 $pcap_t = Net::Pcap::open_offline($opts{'i'}, \$err);
 die "Could not open libpcap: $err\n" unless(defined($pcap_t));
@@ -172,7 +173,7 @@ sub track_beacon {
 	    $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->add_data($sc->{'tstamp'} + $d);
 	}
 
-	warn "bssid $bssid2 has changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs\n" if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
+	push(@{$warnings{'beacons'}->{$bssid}}, "bssid $bssid2 has changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs") if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
     }
     else {
 	$beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
@@ -266,10 +267,10 @@ sub process_pkt {
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
 
-	warn "Unexpected dst=$dst in beacon of bssid=$bssid!\n" unless($dst eq 'ffffffffffff');
-	warn "Unexpected src<>bssid ($src<>$bssid) in beacon!\n" unless($src eq $bssid);
-
 	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1$2.$3$4.$5$6/;
+
+	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected dst=$dst in beacon of bssid=$bssid!") unless($dst eq 'ffffffffffff');
+	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected src<>bssid ($src<>$bssid) in beacon!") unless($src eq $bssid);
 
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 	my $bssid2 = $bssid;
@@ -577,7 +578,7 @@ sub build_losses {
 		xdata => \@tslots,
 		ydata => \@beacons,
 		style => 'lines',
-		width => 5,
+		width => 3,
 		linetype => 1,
 		color => 'dark-green',
 		title => "beacons $bssid2",
@@ -828,10 +829,12 @@ foreach my $freq (keys %beacons) {
 
 	if($count < $min_samples) {
 	    print " ignoring BSSID $bssid @ ${freq}kHz - less than $min_samples samples\n";
+	    print STDERR join("\n", @{$warnings{'beacons'}->{$bssid}});
 	    next;
 	}
 
 	print " BSSID $bssid @ $freq kHz\n";
+	print STDERR join("\n", @{$warnings{'beacons'}->{$bssid}});
 	foreach my $bssid2 (sort keys %{$beacons{$freq}->{$bssid}->{'counter'}}) {
 	    print "  $bssid2 has $beacons{$freq}->{$bssid}->{counter}->{$bssid2}";
 	    print " (", $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->count()," lost)"
