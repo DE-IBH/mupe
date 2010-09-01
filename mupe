@@ -35,7 +35,7 @@ mupe <options>
 
  Options:
    -d <xdim,ydim>                  image dimension (default: 3,2)
-   -f <output format>              graph output format (default: png)
+   -f <output format>              image output format (default: png)
    -i <file.pcap>                  pcap input file (required)
    -l <linetype>                   linetype (default: points pt 1)
    -s <BSSID subst>                perl regex subst on BSSIDs (default: s/.$/0/)
@@ -50,6 +50,10 @@ mupe <options>
 =item B<-d <xdim,ydim>>
 
 Image dimension used to plot the charts (default: I<3,2>).
+
+=item B<-f <output format>>
+
+Image output format as png, pdf, ps etc. - see gnuplot(1) (default: I<png>).
 
 =item B<-i <file.pcap>>
 
