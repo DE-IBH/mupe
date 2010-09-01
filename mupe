@@ -34,6 +34,7 @@ mupe - MUltiPath Estimator
 mupe <options>
 
  Options:
+   -d <xdim,ydim>                  image dimension (default: 3,2)
    -f <output format>              graph output format (default: png)
    -i <file.pcap>                  pcap input file (required)
    -l <linetype>                   linetype (default: points pt 1)
@@ -45,6 +46,10 @@ mupe <options>
 =head1 OPTIONS
 
 =over 8
+
+=item B<-d <xdim,ydim>>
+
+Image dimension used to plot the charts (default: I<3,2>).
 
 =item B<-i <file.pcap>>
 
@@ -118,16 +123,16 @@ my %IEEE80211_RADIOTAP_FIELDLEN = (
 );
 
 my %opts;
-getopts('f:s:l:t:i:', \%opts);
+getopts('d:f:s:l:t:i:', \%opts);
 
 HELP_MESSAGE() unless(defined($opts{'i'}));
 
 $opts{'l'} = 'points pt 1' unless(defined($opts{'l'}));
 $opts{'s'} = 's/.$/0/' unless(defined($opts{'s'}));
 $opts{'f'} = 'png' unless(defined($opts{'f'}));
+$opts{'d'} = '3,2' unless(defined($opts{'d'}) && $opts{'d'} =~ /^(\d+),(\d+)$/);
 
 my $min_samples = 10;
-my $chart_dim = '3,2';
 
 sub HELP_MESSAGE {
     pod2usage(1);
@@ -394,7 +399,7 @@ sub build_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
-	imagesize => $chart_dim,
+	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
 	},
@@ -413,7 +418,7 @@ sub build_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
-	imagesize => $chart_dim,
+	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
 	},
@@ -479,7 +484,7 @@ sub build_distri {
 	xtics => \@distri_signal,
 	xrange => [-96,-20],
 	yrange => [0,100],
-	imagesize => $chart_dim,
+	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
 	},
@@ -555,7 +560,7 @@ sub build_losses {
 	    title => "beacon frame losses\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
-	    imagesize => $chart_dim,
+	    imagesize => $opts{'d'},
 	    grid => {
 		width => 1.
 	    },
@@ -679,7 +684,7 @@ sub build_sta_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
-	imagesize => $chart_dim,
+	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
 	},
@@ -698,7 +703,7 @@ sub build_sta_trend_jitter {
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dB',
-	imagesize => $chart_dim,
+	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
 	},
@@ -772,7 +777,7 @@ sub build_sta_distri {
 	xtics => \@distri_signal,
 	xrange => [-96,-20],
 	yrange => [0,100],
-	imagesize => $chart_dim,
+	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
 	},
