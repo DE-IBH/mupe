@@ -595,7 +595,7 @@ sub build_losses {
 	    ),
 	);
 
-	$res{"beacon-losses.$bssid2"} = "$bssid2 beacon frame losses",
+	$res{"beacon-losses.$bssid2"} = "beacon frame losses [$bssid2]",
     }
     close(HD);
 
