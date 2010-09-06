@@ -444,8 +444,14 @@ sub build_trend_jitter {
     close(HD);
 
     return (
-	'signal-trend' => 'beacon frame signal trend',
-	'signal-jitter' => 'beacon frame signal jitter',
+	'beacon frame signal trend' => {
+	    'img' => sprintf($tfn, 'signal-trend', $opts{'f'}),
+	    'pre' => sprintf($tfn, 'signal-trend', 'txt'),
+	},
+	'beacon frame signal jitter' => {
+	    'img' => sprintf($tfn, 'signal-jitter', $opts{'f'}),
+	    'pre' => sprintf($tfn, 'signal-jitter', 'txt'),
+	},
     );
 }
 
@@ -496,7 +502,10 @@ sub build_distri {
     );
 
     return (
-	'signal-distri' => 'beacon frame signal distribution',
+	'beacon frame signal distribution' => {
+	    'img' => sprintf($tfn, 'signal-distri', $opts{'f'}),
+	    'pre' => sprintf($tfn, 'signal-distri', 'txt'),
+	},
     );
 }
 
