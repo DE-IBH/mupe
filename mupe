@@ -174,7 +174,7 @@ sub track_beacon {
 	    $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->add_data($sc->{'tstamp'} + $d);
 	}
 
-	push(@{$warnings{'beacons'}->{$bssid}}, "bssid $bssid2 has changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs") if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
+	$warnings{'beacons'}->{$bssid}->{"changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs"}++ if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
     }
     else {
 	$beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
@@ -272,8 +272,8 @@ sub process_pkt {
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
 
-	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected dst=$dst in beacon of bssid=$bssid!") unless($dst eq 'ffff.ffff.ffff');
-	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected src!=bssid ($src!=$bssid) in beacon!") unless($src eq $bssid);
+	$warnings{'beacons'}->{$bssid}->{"Unexpected dst=$dst in beacon of bssid=$bssid!"}++ unless($dst eq 'ffff.ffff.ffff');
+	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
 
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 	my $bssid2 = $bssid;
@@ -803,12 +803,14 @@ foreach my $freq (keys %beacons) {
 
 	if($count < $min_samples) {
 	    print " ignoring BSSID $bssid @ ${freq}kHz - less than $min_samples samples\n";
-	    print STDERR join("\n", @{$warnings{'beacons'}->{$bssid}});
+	    print STDERR join("\n", keys %{$warnings{'beacons'}->{$bssid}})
+		if(exists($warnings{'beacons'}->{$bssid}));
 	    next;
 	}
 
 	print " BSSID $bssid @ $freq kHz\n";
-	print STDERR join("\n", @{$warnings{'beacons'}->{$bssid}});
+	print STDERR join("\n", keys %{$warnings{'beacons'}->{$bssid}})
+	    if(exists($warnings{'beacons'}->{$bssid}));
 	foreach my $bssid2 (sort keys %{$beacons{$freq}->{$bssid}->{'counter'}}) {
 	    print "  $bssid2 has $beacons{$freq}->{$bssid}->{counter}->{$bssid2}";
 	    print " (", $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->count()," lost)"
