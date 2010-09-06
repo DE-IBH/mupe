@@ -83,6 +83,7 @@ use Statistics::Descriptive;
 use POSIX;
 use List::Util qw(min max sum);
 use File::Basename;
+use Template;
 
 $|++;
 
@@ -794,33 +795,8 @@ sub build_sta_distri {
     );
 }
 
-my $fn = $opts{'i'};
-$fn =~ s/\.pcap$//;
-$fn .= ".html";
-
-open(HHTML, ">$fn") || die "Could not open output file '$fn': $!\n";
-print HHTML <<BOH;
-<html>
-<header>
-<title>mupe: $opts{i}</title>
-<script language="javascript"> 
-    function toggle(elName) {
-	var ele = document.getElementById(elName);
-	if(ele.style.display == "block") {
-	    ele.style.display = "none";
-	}
-	else {
-	    ele.style.display = "block";
-	}
-}
-</script>
-</header>
-<body>
-<h1>mupe: $opts{i}</h1>
-BOH
-
 print "\nGenerating beacon frame graphs:\n";
-print HHTML "<h2>Beacon frame graphs</h2>\n";
+my %bframes;
 foreach my $freq (keys %beacons) {
     foreach my $bssid (sort keys %{$beacons{$freq}}) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
@@ -853,30 +829,12 @@ foreach my $freq (keys %beacons) {
 	    build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
 	);
 
-	print HHTML "<h3>$bssid</h3>";
-	foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
-	    my $png = sprintf($tfn, $k, 'png');
-	    my $txt = sprintf($tfn, $k, 'txt');
-
-	    print HHTML "<li><a href=\"javascript:toggle('$txt')\">$links{$k}</a>\n";
-	    print HHTML "<div id=\"$txt\" style=\"display: none;\">\n";
-	    print HHTML "<p><a href=\"$png\"><img src=\"$png\" alt=\"$links{$k}\" border=\"0\" height=\"80%\" width=\"80%\"/></a></p><pre>\n";
-	    if (open(HPRE, $txt)) {
-		print HHTML join('', <HPRE>);
-		close(HPRE);
-	    }
-	    else {
-		print HHTML '&nbsp;';
-	    }
-	    print HHTML "</pre>\n";
-	    print HHTML "</div></li>\n"
-	}
-	print HHTML "</ul>\n";
+	$bframes{$freq}->{$bssid} = \%links;
     }
 }
 
 print "\nGenerating data frame graphs:\n";
-print HHTML "<h2>Data frame graphs</h2>\n";
+my %dframes;
 foreach my $src (sort keys %stas) {
     print " STA $src\n";
 
@@ -890,24 +848,115 @@ foreach my $src (sort keys %stas) {
 	build_sta_distri($tfn, $subtitle, $stas{$src}),
     );
 
-    print HHTML "<h3>$src</h3><ul>";
-    foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
-	my $png = sprintf($tfn, $k, 'png');
-	my $txt = sprintf($tfn, $k, 'txt');
-
-	print HHTML "<li><a href=\"javascript:toggle('$txt')\">$links{$k}</a>\n";
-	print HHTML "<div id=\"$txt\" style=\"display: none;\">\n";
-	print HHTML "<p><a href=\"$png\"><img src=\"$png\" alt=\"$links{$k}\" border=\"0\" height=\"80%\" width=\"80%\"/></a></p><pre>\n";
-	open(HPRE, $txt);
-	print HHTML join('', <HPRE>);
-	close(HPRE);
-	print HHTML "</pre>\n";
-	print HHTML "</div></li>\n"
-    }
-    print HHTML "</ul>\n";
+    $dframes{$src} = \%links;
 }
 
-print HHTML <<EOH;
+print "\nCreating result HTML page:\n";
+my $fn = $opts{'i'};
+$fn =~ s/\.pcap$//;
+$fn .= ".html";
+
+open(HHTML, ">$fn") || die "Could not open output file '$fn': $!\n";
+
+my $tt = Template->new(
+    POST_CHOMP => 1,
+    EVAL_PERL => 1,
+) || die $Template::ERROR, "\n";
+$tt->process(\*DATA, {'FN' => $opts{'i'}}, \*HHTML) || die $tt->error(), "\n";
+
+__DATA__
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
+<header>
+<title>[mupe] [% FN %]</title>
+<script language="javascript"> 
+    function toggle(elName) {
+	var ele = document.getElementById(elName);
+	if(ele.style.display == "block") {
+	    ele.style.display = "none";
+	}
+	else {
+	    ele.style.display = "block";
+	}
+}
+</script>
+</header>
+<body>
+<h1>[mupe] [% fn %]</h1>
+[% BLOCK link %]
+<li>
+    <a href="javascript:toggle('[% id %]')">[% title %]</a>
+    <div id="[% id %]" style="display: none;">
+	<p>
+	    <a href="[% png %]">
+		<img src="[% png %]" alt="[% title %]" border="0" height="80%" width="80%"/>
+	    </a>
+	</p>
+	<pre>
+[% content %]
+	</pre>
+    </div>
+</li>
+[% END %]
+
+[% PERL %]
+
+if(keys %bframes) {
+    print "<h2>Beacon frame graphs</h2>\n";
+
+    foreach my $freq (keys %bframes) {
+	foreach my $bssid (keys %{$bframes{$freq}}) {
+	    print "<h3>$bssid</h3>\n";
+	    print "<ul>\n";
+
+	    my $links = $bframes{$freq}->{$bssid};
+	    foreach my $k (sort {$links->{$a} cmp $links->{$b}} keys %{$links}) {
+		my $png = sprintf($tfn, $k, 'png');
+		my $txt = sprintf($tfn, $k, 'txt');
+		my $content = '';
+		if (open(HPRE, $txt)) {
+		    $content = join('', <HPRE>);
+		    close(HPRE);
+		}
+                print $context->include('link', {
+		    content => $content,
+		    id => $txt,
+		    png => $png,
+		    title => $links->{$k},
+                });
+	    }
+	    print "</ul>\n";
+	}
+    }
+}
+
+if(keys %dframes) {
+    print "<h2>Data frame graphs</h2>\n";
+    foreach my $src (sort keys %dframes) {
+	print "<h3>$src</h3>\n";
+	print "<ul>\n";
+	foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
+	    my $png = sprintf($tfn, $k, 'png');
+	    my $txt = sprintf($tfn, $k, 'txt');
+
+	    my $content = '';
+	    if (open(HPRE, $txt)) {
+		$content = join('', <HPRE>);
+		close(HPRE);
+	    }
+	    print $context->include('link', {
+		content => $content,
+		id => $txt,
+		png => $png,
+		title => $links->{$k},
+            });
+        }
+	print "</ul>\n";
+    }
+}
+
+[% END %]
 </body>
 </html>
-EOH
