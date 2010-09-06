@@ -271,7 +271,7 @@ sub process_pkt {
 	$bssid =~ s/^(.{2})(.{2})(.{2})(.{2})(.{2})(.{2})$/$1$2.$3$4.$5$6/;
 
 	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected dst=$dst in beacon of bssid=$bssid!") unless($dst eq 'ffffffffffff');
-	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected src<>bssid ($src<>$bssid) in beacon!") unless($src eq $bssid);
+	push(@{$warnings{'beacons'}->{$bssid}}, "Unexpected src!=bssid ($src!=$bssid) in beacon!") unless($src eq $bssid);
 
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 	my $bssid2 = $bssid;
