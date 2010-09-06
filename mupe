@@ -526,6 +526,7 @@ sub build_losses {
     open(HD, sprintf ">$tfn", 'beacon-losses', 'txt');
     my @bssid2 = sort keys %{$data->{'losses'}};
     my %res;
+    $res{"beacon frame losses"}->{'pre'} = sprintf($tfn, 'beacon-losses', 'txt');
     foreach my $bssid2 (@bssid2) {
 	print HD "$bssid2\n";
 	print HD " # beacons = ".$data->{'counter'}->{$bssid2}."\n";
@@ -604,7 +605,7 @@ sub build_losses {
 	    ),
 	);
 
-	$res{"beacon-losses.$bssid2"} = "beacon frame losses [$bssid2]",
+	$res{"beacon frame losses [$bssid2]"}->{'img'} = $fn;
     }
     close(HD);
 
@@ -747,8 +748,14 @@ sub build_sta_trend_jitter {
     close(HD);
 
     return (
-	'signal-trend' => 'data frame signal trend',
-	'signal-jitter' => 'data frame signal jitter',
+	'data frame signal trend' => {
+	    'img' => sprintf($tfn, 'signal-trend', $opts{'f'}),
+	    'pre' => sprintf($tfn, 'signal-trend', 'txt'),
+	},
+	'data frame signal jitter' => {
+	    'img' => sprintf($tfn, 'signal-jitter', $opts{'f'}),
+	    'pre' => sprintf($tfn, 'signal-jitter', 'txt'),
+	},
     );
 }
 
@@ -811,8 +818,9 @@ sub build_sta_distri {
     );
 }
 
+my %links;
+
 print "\nGenerating beacon frame graphs:\n";
-my %bframes;
 foreach my $freq (keys %beacons) {
     foreach my $bssid (sort keys %{$beacons{$freq}}) {
 	my $count = $beacons{$freq}->{$bssid}->{'tstamps'}->{'count'};
@@ -841,18 +849,17 @@ foreach my $freq (keys %beacons) {
 	$tfn .= ".BSSID-$bssid-${freq}kHz.%s.%s";
 	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
 
-	my %links = (
+	my %l = (
 	    build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
 	    build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
 	    build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
 	);
 
-	$bframes{$freq}->{$bssid} = \%links;
+	$links{'beacons'}->{$freq}->{$bssid} = \%l;
     }
 }
 
 print "\nGenerating data frame graphs:\n";
-my %dframes;
 foreach my $src (sort keys %stas) {
     print " STA $src\n";
 
@@ -861,12 +868,12 @@ foreach my $src (sort keys %stas) {
     $tfn .= ".STA-$src.%s.%s";
     my $subtitle = "$opts{i} [STA = $src, tslot = ${tfactor}s]";
 
-    my %links = (
+    my %l = (
 	build_sta_trend_jitter($tfn, $subtitle, $stas{$src}),
 	build_sta_distri($tfn, $subtitle, $stas{$src}),
     );
 
-    $dframes{$src} = \%links;
+    $links{'data'}->{$src} = \%l;
 }
 
 print "\nCreating result HTML page:\n";
@@ -880,7 +887,14 @@ my $tt = Template->new(
     POST_CHOMP => 1,
     EVAL_PERL => 1,
 ) || die $Template::ERROR, "\n";
-$tt->process(\*DATA, {'FN' => $opts{'i'}}, \*HHTML) || die $tt->error(), "\n";
+$tt->process(
+    \*DATA,
+    {
+	'fn' => $opts{'i'},
+	'links' => \%links,
+    },
+    \*HHTML
+) || die $tt->error(), "\n";
 
 __DATA__
 <?xml version="1.0" encoding="UTF-8" ?>
@@ -888,7 +902,7 @@ __DATA__
 <html xmlns="http://www.w3.org/1999/xhtml">
 <html>
 <header>
-<title>[mupe] [% FN %]</title>
+<title>[mupe] [% fn %]</title>
 <script language="javascript"> 
     function toggle(elName) {
 	var ele = document.getElementById(elName);
@@ -921,16 +935,16 @@ __DATA__
 
 [% PERL %]
 
-if(keys %bframes) {
+if(keys %{$stash->get('links')->{'beacons'}}) {
     print "<h2>Beacon frame graphs</h2>\n";
 
-    foreach my $freq (keys %bframes) {
-	foreach my $bssid (keys %{$bframes{$freq}}) {
+    foreach my $freq (keys %{$stash->get('links')->{'beacons'}}) {
+	foreach my $bssid (keys %{$stash->get('links')->{'beacons'}->{$freq}}) {
 	    print "<h3>$bssid</h3>\n";
 	    print "<ul>\n";
 
-	    my $links = $bframes{$freq}->{$bssid};
-	    foreach my $k (sort {$links->{$a} cmp $links->{$b}} keys %{$links}) {
+	    my $links = $stash->get('links')->{'beacons'}->{$freq}->{$bssid};
+	    foreach my $k (sort {$links->{$a} cmp $links->{$b}} keys %{$stash->get('links')}) {
 		my $png = sprintf($tfn, $k, 'png');
 		my $txt = sprintf($tfn, $k, 'txt');
 		my $content = '';
@@ -950,12 +964,13 @@ if(keys %bframes) {
     }
 }
 
-if(keys %dframes) {
+if(keys %{$stash->get('links')->{'data'}}) {
     print "<h2>Data frame graphs</h2>\n";
-    foreach my $src (sort keys %dframes) {
+    foreach my $src (sort keys %{$stash->get('links')->{'data'}}) {
 	print "<h3>$src</h3>\n";
 	print "<ul>\n";
-	foreach my $k (sort {$links{$a} cmp $links{$b}} keys %links) {
+	my $links = $stash->get('links')->{'data'}->{$src};
+	foreach my $k (sort {$links->{$a} cmp $links->{$b}} keys %{$stash->get('links')}) {
 	    my $png = sprintf($tfn, $k, 'png');
 	    my $txt = sprintf($tfn, $k, 'txt');
 
