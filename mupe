@@ -455,11 +455,11 @@ sub build_trend_jitter {
     return (
 	'beacon frame signal trend' => {
 	    'img' => sprintf($tfn, 'signal-trend', $opts{'f'}),
-	    'pre' => sprintf($tfn, 'signal-trend', 'txt'),
+	    'txt' => sprintf($tfn, 'signal-trend', 'txt'),
 	},
 	'beacon frame signal jitter' => {
 	    'img' => sprintf($tfn, 'signal-jitter', $opts{'f'}),
-	    'pre' => sprintf($tfn, 'signal-jitter', 'txt'),
+	    'txt' => sprintf($tfn, 'signal-jitter', 'txt'),
 	},
     );
 }
@@ -513,7 +513,7 @@ sub build_distri {
     return (
 	'beacon frame signal distribution' => {
 	    'img' => sprintf($tfn, 'signal-distri', $opts{'f'}),
-	    'pre' => sprintf($tfn, 'signal-distri', 'txt'),
+	    'txt' => sprintf($tfn, 'signal-distri', 'txt'),
 	},
     );
 }
@@ -526,7 +526,7 @@ sub build_losses {
     open(HD, sprintf ">$tfn", 'beacon-losses', 'txt');
     my @bssid2 = sort keys %{$data->{'losses'}};
     my %res;
-    $res{"beacon frame losses"}->{'pre'} = sprintf($tfn, 'beacon-losses', 'txt');
+    $res{"beacon frame losses"}->{'txt'} = sprintf($tfn, 'beacon-losses', 'txt');
     foreach my $bssid2 (@bssid2) {
 	print HD "$bssid2\n";
 	print HD " # beacons = ".$data->{'counter'}->{$bssid2}."\n";
@@ -750,11 +750,11 @@ sub build_sta_trend_jitter {
     return (
 	'data frame signal trend' => {
 	    'img' => sprintf($tfn, 'signal-trend', $opts{'f'}),
-	    'pre' => sprintf($tfn, 'signal-trend', 'txt'),
+	    'txt' => sprintf($tfn, 'signal-trend', 'txt'),
 	},
 	'data frame signal jitter' => {
 	    'img' => sprintf($tfn, 'signal-jitter', $opts{'f'}),
-	    'pre' => sprintf($tfn, 'signal-jitter', 'txt'),
+	    'txt' => sprintf($tfn, 'signal-jitter', 'txt'),
 	},
     );
 }
@@ -921,14 +921,18 @@ __DATA__
 <li>
     <a href="javascript:toggle('[% id %]')">[% title %]</a>
     <div id="[% id %]" style="display: none;">
+[% IF img %]
 	<p>
-	    <a href="[% png %]">
-		<img src="[% png %]" alt="[% title %]" border="0" height="80%" width="80%"/>
+	    <a href="[% img %]">
+		<img src="[% img %]" alt="[% title %]" border="0" height="80%" width="80%"/>
 	    </a>
 	</p>
+[% END %]
+[% IF content %]
 	<pre>
 [% content %]
 	</pre>
+[% END %]
     </div>
 </li>
 [% END %]
@@ -943,20 +947,24 @@ if(keys %{$stash->get('links')->{'beacons'}}) {
 	    print "<h3>$bssid</h3>\n";
 	    print "<ul>\n";
 
-	    my $links = $stash->get('links')->{'beacons'}->{$freq}->{$bssid};
-	    foreach my $k (sort {$links->{$a} cmp $links->{$b}} keys %{$stash->get('links')}) {
-		my $png = sprintf($tfn, $k, 'png');
-		my $txt = sprintf($tfn, $k, 'txt');
+	    foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'beacons'}->{$freq}->{$bssid}}) {
+		my $links = $stash->get('links')->{'beacons'}->{$freq}->{$bssid}->{$k};
+
 		my $content = '';
-		if (open(HPRE, $txt)) {
+		if (exists($links->{'txt'}) && open(HPRE, $links->{'txt'})) {
 		    $content = join('', <HPRE>);
 		    close(HPRE);
 		}
+
+		my $id = $stash->get('id');
+		$id = 0 if($id eq '');
+		$stash->set('id', $id+1);
+
                 print $context->include('link', {
 		    content => $content,
-		    id => $txt,
-		    png => $png,
-		    title => $links->{$k},
+		    id => "id$id",
+		    img => $links->{'img'},
+		    title => $k,
                 });
 	    }
 	    print "</ul>\n";
@@ -969,21 +977,24 @@ if(keys %{$stash->get('links')->{'data'}}) {
     foreach my $src (sort keys %{$stash->get('links')->{'data'}}) {
 	print "<h3>$src</h3>\n";
 	print "<ul>\n";
-	my $links = $stash->get('links')->{'data'}->{$src};
-	foreach my $k (sort {$links->{$a} cmp $links->{$b}} keys %{$stash->get('links')}) {
-	    my $png = sprintf($tfn, $k, 'png');
-	    my $txt = sprintf($tfn, $k, 'txt');
+	foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'data'}->{$src}}) {
+	    my $links = $stash->get('links')->{'data'}->{$src}->{$k};
 
 	    my $content = '';
-	    if (open(HPRE, $txt)) {
+	    if (exists($links->{'txt'}) && open(HPRE, $links->{'txt'})) {
 		$content = join('', <HPRE>);
 		close(HPRE);
 	    }
+
+	    my $id = $stash->get('id');
+	    $id = 0 if($id eq '');
+	    $stash->set('id', $id+1);
+
 	    print $context->include('link', {
 		content => $content,
-		id => $txt,
-		png => $png,
-		title => $links->{$k},
+		id => "id$id",
+		img => $links->{'img'},
+		title => $k,
             });
         }
 	print "</ul>\n";
