@@ -1,0 +1,52 @@
+mupe - MUltiPath Estimater
+==========================
+
+This script was originally written to evaluate RSSI signal strength jitter
+for 802.11 based wireless lan networks. The script expects tcpdump/tshark
+PCAP files w/ Radiotap headers.
+
+The processing is based on timeslots (default 2sec). The following
+data is processed:
+
+- beacon frames
+    - losses:
+	charts lost frames per timeslot
+
+    - signal distribution:
+	charts RSSI distribution of the hole capture
+
+    - signal jitter:
+	charts MAX-MIN RSSI per timeslot
+
+    - signal trend:
+	charts MIN/AVG/MAX RSSI per timeslot
+
+
+- data frames
+
+    - signal distribution:
+	charts RSSI distribution of the hole capture
+
+    - signal jitter:
+	charts MAX-MIN RSSI per timeslot
+
+    - signal trend:
+	charts MIN/AVG/MAX RSSI per timeslot
+
+[to be continued]
+
+
+Usage
+=====
+
+`pod2man mupe`
+
+
+Required packages
+=================
+
+The following additional perl packages are required:
+
+ Net::Pcap
+ Chart::Gnuplot
+ Statistics::Descriptive
