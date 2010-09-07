@@ -895,6 +895,7 @@ $tt->process(
     },
     \*HHTML
 ) || die $tt->error(), "\n";
+print " $fn\n\n";
 
 __DATA__
 <?xml version="1.0" encoding="UTF-8" ?>
