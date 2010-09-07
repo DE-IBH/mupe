@@ -972,7 +972,7 @@ __DATA__
 </div>
 [% BLOCK link %]
 <li>
-    <a href="javascript:toggle('[% id %]')">[% title %]</a>
+    <a href="javascript:toggle('[% id %]');">[% title %]</a>
     <div id="[% id %]" style="display: none;">
 [% IF img %]
 	<p>
