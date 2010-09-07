@@ -127,6 +127,47 @@ my %IEEE80211_RADIOTAP_FIELDLEN = (
     6 => 1,
 );
 
+my $logo = <<LOGO;
+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
+LOGO
+
 my %opts;
 getopts('d:f:s:l:t:i:', \%opts);
 
@@ -877,6 +918,14 @@ foreach my $src (sort keys %stas) {
 }
 
 print "\nCreating result HTML page:\n";
+
+unless(-e 'mupe.png') {
+    use MIME::Base64;
+    open(HLOGO, '>mupe.png');
+    print HLOGO decode_base64($logo);
+    close(HLOGO);
+}
+
 my $fn = $opts{'i'};
 $fn =~ s/\.pcap$//;
 $fn .= ".html";
@@ -917,7 +966,10 @@ __DATA__
 </script>
 </header>
 <body>
-<h1>[mupe] [% fn %]</h1>
+<div style="margin-bottom:6px;>
+    <img src="mupe.png" height="64" width="64" alt="mupe logo" style="float: left; margin-right: 15px;"/>
+    <h1>[% fn %]</h1>
+</div>
 [% BLOCK link %]
 <li>
     <a href="javascript:toggle('[% id %]')">[% title %]</a>
