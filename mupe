@@ -224,7 +224,7 @@ sub track_beacon {
 	    $beacons{$freq}->{$bssid}->{'losses'}->{$bssid2}->add_data($sc->{'tstamp'} + $d);
 	}
 
-	$warnings{'beacons'}->{$bssid}->{"changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs"}++ if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs."}++ if($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi);
     }
     else {
 	$beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} = $bi;
