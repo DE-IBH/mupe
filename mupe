@@ -205,8 +205,7 @@ $opts{'i'} = basename($opts{'i'});
 my $last_tsamp = 0;
 my %beacons;
 my %stas;
-my %preq;
-my %pres;
+my %probes;
 
 sub track_beacon {
     my ($tstamp, $bssid, $freq, $bssid2, $ts, $bi) = @_;
@@ -252,11 +251,22 @@ sub push_beacon {
     $beacons{$freq}->{$bssid}->{'counter'} -> {$bssid2}++;
 }
 
+sub push_probreq {
+    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
+    $last_tsamp = $_[0];
+
+    my ($tstamp, $src, $freq, $signal) = @_;
+
+    $probes{$dst}->{$freq}->{'req'}->{$src}->{$tstamp} = $signal;
+}
+
 sub push_probres {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
     my ($tstamp, $bssid, $freq, $bssid2, $dst, $signal, $noise) = @_;
+
+    $probes{$dst}->{$freq}->{'resp'}->{$bssid2}->{$tstamp} = $signal;
 }
 
 sub push_data {
@@ -341,6 +351,8 @@ sub process_pkt {
     }
     # probe request frame
     elsif($type == 0x40) {
+	push_probreq($tstamp, $src, $rt_frequency, $rt_ssi_signal);
+
 	print "p";
     }
     # probe response frame
