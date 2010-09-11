@@ -894,6 +894,7 @@ sub build_sta_distri {
 sub build_probes($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
+    return ();
 }
 
 
