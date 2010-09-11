@@ -304,7 +304,7 @@ sub process_pkt {
     ### XXX /crude hack XXX ###
 
     # decode IEEE 802.11 Beacon frame
-    my ($type, $flags, $duration, $dst, $src, $bssid, $seq) = unpack('CCna6a6a6v', substr($pkt, $it_len));
+    my ($type, $flags, $duration, $dst, $src, $bssid) = unpack('CCna6a6a6v', substr($pkt, $it_len));
 
     $dst = unpack('H12', $dst);
     $src = unpack('H12', $src);
@@ -317,8 +317,6 @@ sub process_pkt {
     # beacon frame
     if($type == 0x80) {
 	my ($ts_low, $ts_high, $bi) = unpack('VVv', substr($pkt, $it_len + 0x18));
-
-	$seq >>= 4 if(defined($seq));
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
 
@@ -334,13 +332,14 @@ sub process_pkt {
 
 	print "b";
     }
-    # probe request/response frame
-    elsif($type == 0x40 || $type == 0x50) {
+    # probe request frame
+    elsif($type == 0x40) {
     }
+    elsif($type == 0x50) {
+    }
+    # probe response frame
     # data frame
     elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
-	$seq >>= 4 if(defined($seq));
-
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 
 	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal, $rt_ssi_noise);
