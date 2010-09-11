@@ -334,10 +334,25 @@ sub process_pkt {
     }
     # probe request frame
     elsif($type == 0x40) {
-    }
-    elsif($type == 0x50) {
+	print "p";
     }
     # probe response frame
+    elsif($type == 0x50) {
+	my ($ts_low, $ts_high, $bi) = unpack('VVv', substr($pkt, $it_len + 0x18));
+	my $ts = $ts_high << 32 | $ts_low;
+	$bi *= 1024;
+
+	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs."}++
+	    if(exists($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}) && ($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi));
+
+	my $bssid2 = $bssid;
+	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
+
+#	push_probres($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal, $rt_ssi_noise);
+
+	print "r";
+    }
     # data frame
     elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
