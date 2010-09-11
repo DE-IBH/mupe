@@ -257,7 +257,7 @@ sub push_probreq {
 
     my ($tstamp, $src, $freq, $signal) = @_;
 
-    $probes{$dst}->{$freq}->{'req'}->{$src}->{$tstamp} = $signal;
+    $probes{$src}->{$freq}->{'req'}->{$tstamp} = $signal;
 }
 
 sub push_probres {
@@ -323,6 +323,8 @@ sub process_pkt {
     # decode IEEE 802.11 Beacon frame
     my ($type, $flags, $duration, $dst, $src, $bssid) = unpack('CCna6a6a6v', substr($pkt, $it_len));
 
+    my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
+
     $dst = unpack('H12', $dst);
     $src = unpack('H12', $src);
     $bssid = unpack('H12', $bssid);
@@ -340,7 +342,6 @@ sub process_pkt {
 	$warnings{'beacons'}->{$bssid}->{"Unexpected dst=$dst in beacon of bssid=$bssid!"}++ unless($dst eq 'ffff.ffff.ffff');
 	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
 
-	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
@@ -361,12 +362,12 @@ sub process_pkt {
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
 
-	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
-	$warnings{'beacons'}->{$bssid}->{"Changed beacon interval from $beacons{$freq}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs."}++
-	    if(exists($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}) && ($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi));
-
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
+
+	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon interval from $beacons{$rt_frequency}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs."}++
+	    if(exists($beacons{$rt_frequency}->{$bssid}->{'beacon'}->{$bssid2}) && ($beacons{$rt_frequency}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi));
 
 	push_probres($tstamp, $bssid, $rt_frequency, $bssid2, $dst, $rt_ssi_signal);
 
@@ -374,8 +375,6 @@ sub process_pkt {
     }
     # data frame
     elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
-	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
-
 	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal);
 
 	print "d";
@@ -892,6 +891,12 @@ sub build_sta_distri {
     );
 }
 
+sub build_probes($$$) {
+    my ($tfn, $subtitle, $data) = @_;
+
+}
+
+
 my %links;
 
 print "\nGenerating beacon frame graphs:\n";
@@ -948,6 +953,22 @@ foreach my $src (sort keys %stas) {
     );
 
     $links{'data'}->{$src} = \%l;
+}
+
+print "\nGenerating probe pattern graphs:\n";
+foreach my $src (sort keys %probes) {
+    print " STA $src\n";
+
+    my $tfn = $opts{'i'};
+    $tfn =~ s/\.pcap$//;
+    $tfn .= ".probes-$src.%s.%s";
+    my $subtitle = "$opts{i} [STA = $src, tslot = ${tfactor}s]";
+
+    my %l = (
+	build_probes($tfn, $subtitle, $probes{$src}),
+    );
+
+    $links{'probes'}->{$src} = \%l;
 }
 
 print "\nCreating result HTML page:\n";
@@ -1065,6 +1086,35 @@ if(keys %{$stash->get('links')->{'data'}}) {
 	print "<ul>\n";
 	foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'data'}->{$src}}) {
 	    my $links = $stash->get('links')->{'data'}->{$src}->{$k};
+
+	    my $content = '';
+	    if (exists($links->{'txt'}) && open(HPRE, $links->{'txt'})) {
+		$content = join('', <HPRE>);
+		close(HPRE);
+	    }
+
+	    my $id = $stash->get('id');
+	    $id = 0 if($id eq '');
+	    $stash->set('id', $id+1);
+
+	    print $context->include('link', {
+		content => $content,
+		id => "id$id",
+		img => $links->{'img'},
+		title => $k,
+            });
+        }
+	print "</ul>\n";
+    }
+}
+
+if(keys %{$stash->get('links')->{'probes'}}) {
+    print "<h2>Probe pattern graphs</h2>\n";
+    foreach my $src (sort keys %{$stash->get('links')->{'probes'}}) {
+	print "<h3>$src</h3>\n";
+	print "<ul>\n";
+	foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'probes'}->{$src}}) {
+	    my $links = $stash->get('links')->{'probes'}->{$src}->{$k};
 
 	    my $content = '';
 	    if (exists($links->{'txt'}) && open(HPRE, $links->{'txt'})) {
