@@ -374,7 +374,7 @@ sub process_pkt {
 	print "r";
     }
     # data frame
-    elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
+    elsif(($type & 0x0f) == 8 && !($src =~ /0[01]00\.0000\.0000/)) {
 	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal);
 
 	print "d";
