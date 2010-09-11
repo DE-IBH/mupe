@@ -238,7 +238,7 @@ sub push_beacon {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
-    my ($tstamp, $bssid, $freq, $bssid2, $signal, $noise) = @_;
+    my ($tstamp, $bssid, $freq, $bssid2, $signal) = @_;
 
     unless(exists($beacons{$freq}->{$bssid}->{'tstamps'})) {
 	$beacons{$freq}->{$bssid}->{'tstamps'} = Statistics::Descriptive::Full->new();
@@ -264,7 +264,7 @@ sub push_probres {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
-    my ($tstamp, $bssid, $freq, $bssid2, $dst, $signal, $noise) = @_;
+    my ($tstamp, $bssid, $freq, $bssid2, $dst, $signal) = @_;
 
     $probes{$dst}->{$freq}->{'resp'}->{$bssid2}->{$tstamp} = $signal;
 }
@@ -273,7 +273,7 @@ sub push_data {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
-    my ($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal, $rt_ssi_noise) = @_;
+    my ($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal) = @_;
 
     unless(exists($stas{$src}->{$rt_frequency}->{$bssid})) {
 	$stas{$src}->{$rt_frequency}->{$bssid}->{'tstamps'} = Statistics::Descriptive::Full->new();
@@ -345,7 +345,7 @@ sub process_pkt {
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $ts, $bi);
-	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal, $rt_ssi_noise);
+	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
     }
@@ -368,7 +368,7 @@ sub process_pkt {
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
-	push_probres($tstamp, $bssid, $rt_frequency, $bssid2, $dst, $rt_ssi_signal, $rt_ssi_noise);
+	push_probres($tstamp, $bssid, $rt_frequency, $bssid2, $dst, $rt_ssi_signal);
 
 	print "r";
     }
@@ -376,7 +376,7 @@ sub process_pkt {
     elsif(($type & 0x0f) == 8 && !($src =~ /0[01]0000000000/)) {
 	my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
 
-	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal, $rt_ssi_noise);
+	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal);
 
 	print "d";
     }
