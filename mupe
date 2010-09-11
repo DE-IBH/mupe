@@ -252,6 +252,13 @@ sub push_beacon {
     $beacons{$freq}->{$bssid}->{'counter'} -> {$bssid2}++;
 }
 
+sub push_probres {
+    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
+    $last_tsamp = $_[0];
+
+    my ($tstamp, $bssid, $freq, $bssid2, $dst, $signal, $noise) = @_;
+}
+
 sub push_data {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
@@ -349,7 +356,7 @@ sub process_pkt {
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
-#	push_probres($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal, $rt_ssi_noise);
+	push_probres($tstamp, $bssid, $rt_frequency, $bssid2, $dst, $rt_ssi_signal, $rt_ssi_noise);
 
 	print "r";
     }
