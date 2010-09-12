@@ -896,7 +896,75 @@ sub build_sta_distri {
 sub build_probes($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
-    return ();
+    my $fn = sprintf $tfn, 'probe-pattern', $opts{'f'};
+    unlink($fn);
+
+    my %tslots;
+    my %reqs;
+    foreach my $freq (sort {$a <=> $b} keys %{$data}) {
+	my $i = -1;
+	foreach my $tstamp (keys %{$data->{$freq}->{'req'}}) {
+
+	    $i++;
+	    my $t = int($tstamp) - (int($tstamp) % $tfactor);
+	    $tslots{$t} = 1;
+	    $reqs{$freq}->{$t}++;
+	}
+    }
+
+    my @ds;
+    my @tslots = sort {$a <=> $b} keys %tslots;
+    foreach my $freq (sort {$a <=> $b} keys %reqs) {
+	my @freqs;
+	my @reqs;
+
+	foreach my $ts (@tslots) {
+	    push(@freqs, $freq);
+	    if(defined($reqs{$freq}->{$ts})) {
+		push(@reqs, 1+$reqs{$freq}->{$ts});
+	    }
+	    else {
+		push(@reqs, 1);
+	    }
+	}
+
+	push(@ds,
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@tslots,
+		ydata => \@freqs,
+		zdata => \@reqs,
+		style => 'pm3d',
+		using => '1:2:3'
+	    ),
+	);
+    }
+
+    if($#ds == -1) {
+	print "  ignoring - no data\n";
+	return ()
+    }
+
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "probe request pattern\\n$subtitle",
+	xlabel => 'timeslot',
+	ylabel => 'kHz',
+	imagesize => $opts{'d'},
+	grid => {
+	    width => 1.
+	},
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+	view => 'map',
+    )->plot3d(@ds);
+
+    return (
+	'data frame signal jitter' => {
+	    'img' => sprintf($tfn, 'probe-pattern', $opts{'f'}),
+	    'txt' => sprintf($tfn, 'probe-pattern', 'txt'),
+	},
+    );
 }
 
 
@@ -964,7 +1032,7 @@ foreach my $src (sort keys %probes) {
 
     my $tfn = $opts{'i'};
     $tfn =~ s/\.pcap$//;
-    $tfn .= ".probes-$src.%s.%s";
+    $tfn .= ".STA-$src.%s.%s";
     my $subtitle = "$opts{i} [STA = $src, tslot = ${tfactor}s]";
 
     my %l = (
