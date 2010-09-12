@@ -963,6 +963,7 @@ sub build_probes($$$) {
     my @ds;
     my @tslots = sort {$a <=> $b} keys %tslots;
     my %ztics;
+    my $max = 0;
     foreach my $freq (sort {$a <=> $b} keys %reqs) {
 	my @freqs;
 	my @reqs;
@@ -971,6 +972,7 @@ sub build_probes($$$) {
 	    push(@freqs, $freq);
 	    if(defined($reqs{$freq}->{$ts})) {
 		push(@reqs, $reqs{$freq}->{$ts});
+		$max = $reqs{$freq}->{$ts} if($max < $reqs{$freq}->{$ts});
 		$ztics{$reqs{$freq}->{$ts}} = 1;
 	    }
 	    else {
@@ -978,15 +980,27 @@ sub build_probes($$$) {
 	    }
 	}
 
-	push(@ds,
-	    Chart::Gnuplot::DataSet->new(
-		xdata => \@tslots,
-		ydata => \@freqs,
-		zdata => \@reqs,
-		style => "points pt 1 ps 3 palette",
-		using => '1:2:3'
-	    ),
-	);
+	if(scalar keys %reqs == 1) {
+	    push(@ds,
+		Chart::Gnuplot::DataSet->new(
+		    xdata => \@tslots,
+		    ydata => \@reqs,
+		    style => "impulses",
+		    using => '1:2'
+		),
+	    );
+	}
+	else {
+	    push(@ds,
+		Chart::Gnuplot::DataSet->new(
+		    xdata => \@tslots,
+		    ydata => \@freqs,
+		    zdata => \@reqs,
+		    style => "points pt 1 ps 3 palette",
+		    using => '1:2:3'
+		),
+	    );
+	}
     }
 
     if($#ds == -1) {
@@ -994,26 +1008,47 @@ sub build_probes($$$) {
 	return ()
     }
 
-    my @ytics = sort {$a <=> $b} keys %IEEE80211_CHANNELS;
     my @ztics = sort {$a <=> $b} keys %ztics;
+    if(scalar keys %reqs == 1) {
+	Chart::Gnuplot->new(
+	    output => $fn,
+	    title => "probe request count pattern\\n$subtitle",
+	    xlabel => 'timeslot',
+	    ylabel => 'count',
+	    ytics => \@ztics,
+	    yrange => [0, $max+1],
+	    imagesize => $opts{'d'},
+	    grid => {
+		width => 1.
+	    },
+	    timefmt => '"%s"',
+	    xdata => 'time',
+	    bg => 'white',
+	)->plot2d(@ds);
+    }
+    else {
+	my @ytics = sort {$a <=> $b} keys %IEEE80211_CHANNELS;
 
-    Chart::Gnuplot->new(
-	output => $fn,
-	title => "probe request count pattern\\n$subtitle",
-	xlabel => 'timeslot',
-	ylabel => 'MHz',
-	ytics => \@ytics,
-	ztics => \@ztics,
-	imagesize => $opts{'d'},
-	grid => {
-	    width => 1.
-	},
-	timefmt => '"%s"',
-	xdata => 'time',
-	bg => 'white',
-	view => 'map',
-	palette => 'rgbformulae -8,-6,0',
-    )->plot3d(@ds);
+	Chart::Gnuplot->new(
+	    output => $fn,
+	    title => "probe request count pattern\\n$subtitle",
+	    xlabel => 'timeslot',
+	    ylabel => 'MHz',
+	    ytics => \@ytics,
+	    zlabel => 'count',
+	    ztics => \@ztics,
+	    zrange => [0, $max+1],
+	    imagesize => $opts{'d'},
+	    grid => {
+		width => 1.
+	    },
+	    timefmt => '"%s"',
+	    xdata => 'time',
+	    bg => 'white',
+	    view => 'map',
+	    palette => 'rgbformulae -8,-6,0',
+	)->plot3d(@ds);
+    }
 
     return (
 	'probe request count pattern' => {
