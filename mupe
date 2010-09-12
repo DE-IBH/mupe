@@ -1012,7 +1012,7 @@ sub build_probes($$$) {
 	xdata => 'time',
 	bg => 'white',
 	view => 'map',
-	palette => 'rgbformulae 8,6,0',
+	palette => 'rgbformulae -8,-6,0',
     )->plot3d(@ds);
 
     return (
