@@ -1056,7 +1056,7 @@ sub build_probes($$$) {
     return (
 	'probe request count pattern' => {
 	    'img' => sprintf($tfn, 'probe-pattern', $opts{'f'}),
-	    'txt' => sprintf($tfn, 'probe-pattern', 'txt'),
+#	    'txt' => sprintf($tfn, 'probe-pattern', 'txt'),
 	},
     );
 }
