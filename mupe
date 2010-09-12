@@ -996,7 +996,7 @@ sub build_probes($$$) {
 	output => $fn,
 	title => "probe request pattern\\n$subtitle",
 	xlabel => 'timeslot',
-	ylabel => 'kHz',
+	ylabel => 'MHz',
 	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
@@ -1026,13 +1026,13 @@ foreach my $freq (keys %beacons) {
 	my $ts_max = $beacons{$freq}->{$bssid}->{'tstamps'}->{'max'};
 
 	if($count < $min_samples) {
-	    print " ignoring BSSID $bssid @ ${freq}kHz - less than $min_samples samples\n";
+	    print " ignoring BSSID $bssid @ ${freq}MHz - less than $min_samples samples\n";
 	    print STDERR join("\n", keys %{$warnings{'beacons'}->{$bssid}})
 		if(exists($warnings{'beacons'}->{$bssid}));
 	    next;
 	}
 
-	print " BSSID $bssid @ $freq kHz\n";
+	print " BSSID $bssid @ $freq MHz\n";
 	print STDERR join("\n", keys %{$warnings{'beacons'}->{$bssid}})
 	    if(exists($warnings{'beacons'}->{$bssid}));
 	foreach my $bssid2 (sort keys %{$beacons{$freq}->{$bssid}->{'counter'}}) {
@@ -1044,8 +1044,8 @@ foreach my $freq (keys %beacons) {
 
 	my $tfn = $opts{'i'};
 	$tfn =~ s/\.pcap$//;
-	$tfn .= ".BSSID-$bssid-${freq}kHz.%s.%s";
-	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}kHz, tslot = ${tfactor}s]";
+	$tfn .= ".BSSID-$bssid-${freq}MHz.%s.%s";
+	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}MHz, tslot = ${tfactor}s]";
 
 	my %l = (
 	    build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
