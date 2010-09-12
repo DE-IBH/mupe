@@ -937,7 +937,10 @@ sub build_sta_distri {
     );
 
     return (
-	'signal-distri' => 'data frame signal distribution',
+	'data frame signal distribution' => {
+	    'img' => sprintf($tfn, 'signal-distri', $opts{'f'}),
+	    'txt' => sprintf($tfn, 'signal-distri', 'txt'),
+	},
     );
 }
 
@@ -1244,6 +1247,8 @@ if(keys %{$stash->get('links')->{'beacons'}}) {
 if(keys %{$stash->get('links')->{'data'}}) {
     print "<h2>Data frame graphs</h2>\n";
     foreach my $src (sort keys %{$stash->get('links')->{'data'}}) {
+	next unless(scalar keys %{$stash->get('links')->{'data'}->{$src}});
+
 	print "<h3>$src</h3>\n";
 	print "<ul>\n";
 	foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'data'}->{$src}}) {
@@ -1273,6 +1278,8 @@ if(keys %{$stash->get('links')->{'data'}}) {
 if(keys %{$stash->get('links')->{'probes'}}) {
     print "<h2>Probe pattern graphs</h2>\n";
     foreach my $src (sort keys %{$stash->get('links')->{'probes'}}) {
+	next unless(scalar keys %{$stash->get('links')->{'probes'}->{$src}});
+
 	print "<h3>$src</h3>\n";
 	print "<ul>\n";
 	foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'probes'}->{$src}}) {
