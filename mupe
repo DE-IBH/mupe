@@ -1015,7 +1015,7 @@ sub build_probes($$$) {
     if(scalar keys %reqs == 1) {
 	Chart::Gnuplot->new(
 	    output => $fn,
-	    title => "probe request count pattern\\n$subtitle",
+	    title => "probe request count\\n$subtitle",
 	    xlabel => 'timeslot',
 	    ylabel => 'count',
 	    ytics => \@ztics,
@@ -1034,7 +1034,7 @@ sub build_probes($$$) {
 
 	Chart::Gnuplot->new(
 	    output => $fn,
-	    title => "probe request count pattern\\n$subtitle",
+	    title => "probe request count\\n$subtitle",
 	    xlabel => 'timeslot',
 	    ylabel => 'MHz',
 	    ytics => \@ytics,
@@ -1054,7 +1054,7 @@ sub build_probes($$$) {
     }
 
     return (
-	'probe request count pattern' => {
+	'probe request count' => {
 	    'img' => sprintf($tfn, 'probe-pattern', $opts{'f'}),
 #	    'txt' => sprintf($tfn, 'probe-pattern', 'txt'),
 	},
@@ -1120,7 +1120,7 @@ foreach my $src (sort keys %stas) {
     $links{'data'}->{$src} = \%l;
 }
 
-print "\nGenerating probe pattern graphs:\n";
+print "\nGenerating probe frame graphs:\n";
 foreach my $src (sort keys %probes) {
     print " STA $src\n";
 
@@ -1276,7 +1276,7 @@ if(keys %{$stash->get('links')->{'data'}}) {
 }
 
 if(keys %{$stash->get('links')->{'probes'}}) {
-    print "<h2>Probe pattern graphs</h2>\n";
+    print "<h2>Probe frame graphs</h2>\n";
     foreach my $src (sort keys %{$stash->get('links')->{'probes'}}) {
 	next unless(scalar keys %{$stash->get('links')->{'probes'}->{$src}});
 
