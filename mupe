@@ -362,10 +362,11 @@ sub process_pkt {
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
 
+	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
+
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
-	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
 	$warnings{'beacons'}->{$bssid}->{"Changed beacon interval from $beacons{$rt_frequency}->{$bssid}->{beacon}->{$bssid2}->{bi} to ${bi}µs."}++
 	    if(exists($beacons{$rt_frequency}->{$bssid}->{'beacon'}->{$bssid2}) && ($beacons{$rt_frequency}->{$bssid}->{'beacon'}->{$bssid2}->{'bi'} != $bi));
 
