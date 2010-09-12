@@ -390,6 +390,8 @@ sub write_stats {
     my ($fh, $name, $sd) = @_;
 
     printf $fh "%24s = %s\n", "MEAN($name)", $sd->mean();
+    printf $fh "%24s = %s\n", "VAR($name)", $sd->variance();
+    printf $fh "%24s = %s\n", "STDDEV($name)", $sd->standard_deviation();
     printf $fh "%24s = %s\n", "MODE($name)", $sd->mode();
     printf $fh "%24s = %s\n", "Q0($name)", $sd->quantile(0);
     printf $fh "%24s = %s\n", "Q1($name)", $sd->quantile(1);
