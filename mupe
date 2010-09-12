@@ -962,6 +962,7 @@ sub build_probes($$$) {
 
     my @ds;
     my @tslots = sort {$a <=> $b} keys %tslots;
+    my %ztics;
     foreach my $freq (sort {$a <=> $b} keys %reqs) {
 	my @freqs;
 	my @reqs;
@@ -969,10 +970,11 @@ sub build_probes($$$) {
 	foreach my $ts (@tslots) {
 	    push(@freqs, $freq);
 	    if(defined($reqs{$freq}->{$ts})) {
-		push(@reqs, 1+$reqs{$freq}->{$ts});
+		push(@reqs, $reqs{$freq}->{$ts});
+		$ztics{$reqs{$freq}->{$ts}} = 1;
 	    }
 	    else {
-		push(@reqs, 1);
+		push(@reqs, 0);
 	    }
 	}
 
@@ -981,7 +983,7 @@ sub build_probes($$$) {
 		xdata => \@tslots,
 		ydata => \@freqs,
 		zdata => \@reqs,
-		style => 'pm3d',
+		style => "points pt 1 ps 3 palette",
 		using => '1:2:3'
 	    ),
 	);
@@ -992,11 +994,16 @@ sub build_probes($$$) {
 	return ()
     }
 
+    my @ytics = sort {$a <=> $b} keys %IEEE80211_CHANNELS;
+    my @ztics = sort {$a <=> $b} keys %ztics;
+
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "probe request pattern\\n$subtitle",
+	title => "probe request count pattern\\n$subtitle",
 	xlabel => 'timeslot',
 	ylabel => 'MHz',
+	ytics => \@ytics,
+	ztics => \@ztics,
 	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
@@ -1005,10 +1012,11 @@ sub build_probes($$$) {
 	xdata => 'time',
 	bg => 'white',
 	view => 'map',
+	palette => 'rgbformulae 8,6,0',
     )->plot3d(@ds);
 
     return (
-	'data frame signal jitter' => {
+	'probe request count pattern' => {
 	    'img' => sprintf($tfn, 'probe-pattern', $opts{'f'}),
 	    'txt' => sprintf($tfn, 'probe-pattern', 'txt'),
 	},
