@@ -1185,7 +1185,7 @@ __DATA__
 </script>
 </header>
 <body>
-<div style="margin-bottom:6px;>
+<div style="margin-bottom:50px;">
     <img src="mupe.png" height="64" width="64" alt="mupe logo" style="float: left; margin-right: 15px;"/>
     <h1>[% fn %]</h1>
 </div>
