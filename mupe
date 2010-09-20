@@ -280,19 +280,19 @@ sub track_beacon($$$$$) {
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
 }
 
-sub track_clock($$$$$) {
-    my ($tstamp, $bssid, $freq, $bssid2, $ts) = @_;
+sub track_clock($$$$) {
+    my ($tstamp, $bssid, $freq, $ts) = @_;
 
-    unless(exists($clocks{$freq}->{$bssid}->{$bssid2})) {
-	$clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'tstamp'} = $tstamp;
-	$clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'ts'} = $ts;
-	$clocks{$freq}->{$bssid}->{$bssid2}->{'diffs'} = Statistics::Descriptive::Full->new()
+    unless(exists($clocks{$freq}->{$bssid})) {
+	$clocks{$freq}->{$bssid}->{'offsets'}->{'tstamp'} = $tstamp;
+	$clocks{$freq}->{$bssid}->{'offsets'}->{'ts'} = $ts;
+	$clocks{$freq}->{$bssid}->{'diffs'} = Statistics::Descriptive::Full->new()
     }
     else {
-	push(@{$clocks{$freq}->{$bssid}->{$bssid2}->{'tstamps'}}, $tstamp);
-	$clocks{$freq}->{$bssid}->{$bssid2}->{'diffs'}->add_data(
-	    ($tstamp - $clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'tstamp'})*1e6 -
-	    ($ts - $clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'ts'})
+	push(@{$clocks{$freq}->{$bssid}->{'tstamps'}}, $tstamp);
+	$clocks{$freq}->{$bssid}->{'diffs'}->add_data(
+	    ($tstamp - $clocks{$freq}->{$bssid}->{'offsets'}->{'tstamp'})*1e6 -
+	    ($ts - $clocks{$freq}->{$bssid}->{'offsets'}->{'ts'})
 	);
     }
 }
@@ -409,7 +409,7 @@ sub process_pkt($$$) {
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $bi);
-	track_clock($tstamp, $bssid, $rt_frequency, $bssid2, $ts);
+	track_clock($tstamp, $bssid, $rt_frequency, $ts);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
@@ -751,6 +751,47 @@ sub build_losses($$$) {
     close(HD);
 
     return %res;
+}
+
+sub build_clock($$$) {
+    my ($tfn, $subtitle, $data) = @_;
+
+    open(HCLOCK, sprintf(">$tfn", 'clock-diff', 'txt')) || die "Could not open file: $?\n";
+    write_stats(*HCLOCK, 'clock difference', $data->{'diffs'});
+    close(HCLOCK);
+
+    my $fn = sprintf $tfn, 'clock-diff', $opts{'f'};
+    unlink($fn);
+    my @diffs = $data->{'diffs'}->get_data();
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "beacon frame MAC timer difference\\n$subtitle",
+	xlabel => 'timeslot',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	ylabel => 'usec',
+	imagesize => $opts{'d'},
+	grid => {
+	    width => 1.
+	},
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+    )->plot2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => $data->{'tstamps'},
+	    ydata => \@diffs,
+	    style => $opts{'l'},
+	    title => "clock diff",
+	    using => '1:2',
+	),
+    );
+
+    return (
+	'beacon frame MAC timer difference' => {
+	    'img' => $fn,
+	    'txt' => sprintf($tfn, 'clock-diff', 'txt'),
+	},
+    );
 }
 
 
@@ -1115,6 +1156,7 @@ foreach my $freq (keys %beacons) {
 	    build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
 	    build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
 	    build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
+	    build_clock($tfn, $subtitle, $clocks{$freq} -> {$bssid}),
 	);
 
 	$links{'beacons'}->{$freq}->{$bssid} = \%l;
