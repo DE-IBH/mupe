@@ -254,7 +254,7 @@ my %stas;
 my %probes;
 
 sub track_beacon {
-    my ($tstamp, $bssid, $freq, $bssid2, $ts, $bi) = @_;
+    my ($tstamp, $bssid, $freq, $bssid2, $bi) = @_;
 
     if(exists($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2})) {
 	my $sc = $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2};
@@ -277,7 +277,6 @@ sub track_beacon {
 
     push(@{$beacons{$freq}->{$bssid}->{'beacons'}->{$bssid2}}, $tstamp);
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
-    $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'ts'} = $ts;
 }
 
 sub push_beacon {
@@ -391,7 +390,7 @@ sub process_pkt {
 	my $bssid2 = $bssid;
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
-	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $ts, $bi);
+	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $bi);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
