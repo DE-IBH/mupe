@@ -253,7 +253,7 @@ my %beacons;
 my %stas;
 my %probes;
 
-sub track_beacon {
+sub track_beacon($$$$$) {
     my ($tstamp, $bssid, $freq, $bssid2, $bi) = @_;
 
     if(exists($beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2})) {
@@ -279,7 +279,7 @@ sub track_beacon {
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
 }
 
-sub push_beacon {
+sub push_beacon($$$$$) {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
@@ -296,7 +296,7 @@ sub push_beacon {
     $beacons{$freq}->{$bssid}->{'counter'} -> {$bssid2}++;
 }
 
-sub push_probreq {
+sub push_probreq($$$$) {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
@@ -305,7 +305,7 @@ sub push_probreq {
     $probes{$src}->{$freq}->{'req'}->{$tstamp} = $signal;
 }
 
-sub push_probres {
+sub push_probres($$$$$$) {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
@@ -314,7 +314,7 @@ sub push_probres {
     $probes{$dst}->{$freq}->{'resp'}->{$bssid2}->{$tstamp} = $signal;
 }
 
-sub push_data {
+sub push_data($$$$$) {
     die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
     $last_tsamp = $_[0];
 
@@ -329,7 +329,7 @@ sub push_data {
     $stas{$src}->{$rt_frequency}->{$bssid}->{'signals'} -> add_data($rt_ssi_signal);
 }
 
-sub process_pkt {
+sub process_pkt($$$) {
     my($arg, $hdr, $pkt) = @_;
 
     # decode Radiotap header
@@ -432,7 +432,7 @@ print "Reading pcap file:\n";
 Net::Pcap::loop($pcap_t, -1, \&process_pkt, 0);
 print "\n";
 
-sub write_stats {
+sub write_stats($$$) {
     my ($fh, $name, $sd) = @_;
 
     printf $fh "%24s = %s\n", "MEAN($name)", $sd->mean();
@@ -452,7 +452,7 @@ sub write_stats {
     print $fh "\n";
 }
 
-sub build_trend_jitter {
+sub build_trend_jitter($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     my $fn = sprintf $tfn, 'signal-trend', $opts{'f'};
@@ -488,7 +488,7 @@ sub build_trend_jitter {
     }
 
     open(HD, sprintf ">$tfn", 'signal-trend', 'txt');
-    &write_stats(*HD, 'signal', $data->{'signals'});
+    write_stats(*HD, 'signal', $data->{'signals'});
     foreach my $col (sort keys %data) {
 	my $color = shift(@colors);
 	push(@colors, $color);
@@ -496,7 +496,7 @@ sub build_trend_jitter {
 	my $stat = Statistics::Descriptive::Full->new();
 	$stat -> add_data(@{$ydata{$col}});
 
-	&write_stats(*HD, $data{$col}, $stat);
+	write_stats(*HD, $data{$col}, $stat);
 	push(@ds,
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@tslots,
@@ -571,7 +571,7 @@ sub build_trend_jitter {
 	),
     );
     open(HD, sprintf ">$tfn", 'signal-jitter', 'txt');
-    &write_stats(*HD, 'jitter', $sr);
+    write_stats(*HD, 'jitter', $sr);
     close(HD);
 
     return (
@@ -586,7 +586,7 @@ sub build_trend_jitter {
     );
 }
 
-sub build_distri {
+sub build_distri($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     ### Signal Distribution ###
@@ -640,7 +640,7 @@ sub build_distri {
     );
 }
 
-sub build_losses {
+sub build_losses($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     ### Beacon Losses ###
@@ -735,7 +735,7 @@ sub build_losses {
 }
 
 
-sub build_sta_trend_jitter {
+sub build_sta_trend_jitter($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     my $fn = sprintf $tfn, 'signal-trend', $opts{'f'};
@@ -783,7 +783,7 @@ sub build_sta_trend_jitter {
     }
 
     open(HD, sprintf ">$tfn", 'signal-trend', 'txt');
-    &write_stats(*HD, 'signal', $sc);
+    write_stats(*HD, 'signal', $sc);
     foreach my $col (sort keys %data) {
 	my $color = shift(@colors);
 	push(@colors, $color);
@@ -791,7 +791,7 @@ sub build_sta_trend_jitter {
 	my $stat = Statistics::Descriptive::Full->new();
 	$stat -> add_data(@{$ydata{$col}});
 
-	&write_stats(*HD, $data{$col}, $stat);
+	write_stats(*HD, $data{$col}, $stat);
 	push(@ds,
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@tslots,
@@ -866,7 +866,7 @@ sub build_sta_trend_jitter {
 	),
     );
     open(HD, sprintf ">$tfn", 'signal-jitter', 'txt');
-    &write_stats(*HD, 'jitter', $sr);
+    write_stats(*HD, 'jitter', $sr);
     close(HD);
 
     return (
@@ -881,7 +881,7 @@ sub build_sta_trend_jitter {
     );
 }
 
-sub build_sta_distri {
+sub build_sta_distri($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     ### STA Signal Distribution ###
