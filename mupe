@@ -757,7 +757,7 @@ sub build_clock($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     open(HCLOCK, sprintf(">$tfn", 'clock-diff', 'txt')) || die "Could not open file: $?\n";
-    write_stats(*HCLOCK, 'clock difference', $data->{'diffs'});
+    write_stats(*HCLOCK, 'clock diff', $data->{'diffs'});
     close(HCLOCK);
 
     my $fn = sprintf $tfn, 'clock-diff', $opts{'f'};
@@ -765,7 +765,7 @@ sub build_clock($$$) {
     my @diffs = $data->{'diffs'}->get_data();
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "beacon frame MAC timer difference\\n$subtitle",
+	title => "beacon frame MAC clock difference\\n$subtitle",
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'usec',
@@ -787,7 +787,7 @@ sub build_clock($$$) {
     );
 
     return (
-	'beacon frame MAC timer difference' => {
+	'beacon frame MAC clock difference' => {
 	    'img' => $fn,
 	    'txt' => sprintf($tfn, 'clock-diff', 'txt'),
 	},
