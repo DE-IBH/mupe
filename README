@@ -9,6 +9,10 @@ The processing is based on timeslots (default 2sec). The following
 data is processed:
 
 - beacon frames
+    - MAC clock difference
+	charts the clock difference between the AP STA and the
+	sniffing STA
+
     - losses:
 	charts lost frames per timeslot
 
