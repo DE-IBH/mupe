@@ -252,6 +252,7 @@ my $last_tsamp = 0;
 my %beacons;
 my %stas;
 my %probes;
+my %clocks;
 
 sub track_beacon($$$$$) {
     my ($tstamp, $bssid, $freq, $bssid2, $bi) = @_;
@@ -277,6 +278,23 @@ sub track_beacon($$$$$) {
 
     push(@{$beacons{$freq}->{$bssid}->{'beacons'}->{$bssid2}}, $tstamp);
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
+}
+
+sub track_clock($$$$$) {
+    my ($tstamp, $bssid, $freq, $bssid2, $ts) = @_;
+
+    unless(exists($clocks{$freq}->{$bssid}->{$bssid2})) {
+	$clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'tstamp'} = $tstamp;
+	$clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'ts'} = $ts;
+	$clocks{$freq}->{$bssid}->{$bssid2}->{'diffs'} = Statistics::Descriptive::Full->new()
+    }
+    else {
+	push(@{$clocks{$freq}->{$bssid}->{$bssid2}->{'tstamps'}}, $tstamp);
+	$clocks{$freq}->{$bssid}->{$bssid2}->{'diffs'}->add_data(
+	    ($tstamp - $clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'tstamp'})*1e6 -
+	    ($ts - $clocks{$freq}->{$bssid}->{$bssid2}->{'offsets'}->{'ts'})
+	);
+    }
 }
 
 sub push_beacon($$$$$) {
@@ -391,6 +409,7 @@ sub process_pkt($$$) {
 	eval("\$bssid =~ $opts{'s'};") if(defined($opts{'s'}) && $opts{'s'});
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $bi);
+	track_clock($tstamp, $bssid, $rt_frequency, $bssid2, $ts);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
