@@ -7,9 +7,11 @@ mupe (0.9) unstable; urgency=low
   * Switch to filename friendly MAC address format.
   * Generate html file linking charts.
   * Add data frame analysis.
+  * Add probe request frame analysis.
+  * Track relative beacon frame MAC clock drifft.
   * Many minor improvements.
 
- -- Thomas Liske <liske@ibh.de>  
+ -- Thomas Liske <liske@ibh.de>  Tue, 21 Sep 2010 16:12:47 +0200
 
 mupe (0.5) unstable; urgency=low
 
