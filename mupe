@@ -1220,11 +1220,23 @@ my $tt = Template->new(
     POST_CHOMP => 1,
     EVAL_PERL => 1,
 ) || die $Template::ERROR, "\n";
+
+my @params;
+foreach my $key (sort keys %opts) {
+    push(@params, "-$key '$opts{$key}'");
+}
+
+my $date = POSIX::strftime("%FT%T%z", localtime);
+$date =~ s/(\d\d)$/:$1/;
+
 $tt->process(
     \*DATA,
     {
+	'mupe_version' => MUPE_VERSION,
+	'params' => join(' ', @params),
 	'fn' => $opts{'i'},
 	'links' => \%links,
+	'date' => $date,
     },
     \*HHTML
 ) || die $tt->error(), "\n";
@@ -1235,6 +1247,12 @@ __DATA__
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <header>
+<!--
+ mupe [% params %]
+
+-->
+<meta name="generator" content="mupe [% mupe_version %]" />
+<meta name="date" content="[% date %]" />
 <meta http-equiv="pragma" content="no-cache" />
 <meta http-equiv="cache-control" content="no-cache" />
 <meta http-equiv="expires" content="0" />
