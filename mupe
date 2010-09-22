@@ -1246,7 +1246,7 @@ __DATA__
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
-<header>
+<head>
 <!--
  mupe [% params %]
 
@@ -1258,7 +1258,7 @@ __DATA__
 <meta http-equiv="expires" content="0" />
 <link rel="icon" type="image/png" href="mupe.png" />
 <title>[mupe] [% fn %]</title>
-<script language="javascript"> 
+<script type="text/javascript"> 
     function toggle(elName) {
 	var ele = document.getElementById(elName);
 	if(ele.style.display == "block") {
@@ -1269,7 +1269,7 @@ __DATA__
 	}
 }
 </script>
-</header>
+</head>
 <body>
 <div style="margin-bottom:50px;">
     <img src="mupe.png" height="64" width="64" alt="mupe logo" style="float: left; margin-right: 15px;"/>
@@ -1282,7 +1282,7 @@ __DATA__
 [% IF img %]
 	<p>
 	    <a href="[% img %]">
-		<img src="[% img %]" alt="[% title %]" border="0" height="80%" width="80%"/>
+		<img src="[% img %]" alt="[% title %]" style="border: 0px" height="80%" width="80%"/>
 	    </a>
 	</p>
 [% END %]
