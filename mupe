@@ -97,6 +97,8 @@ use Template;
 $|++;
 
 use constant {
+    MUPE_VERSION => '0.9',
+
     # Taken from wireshark 1.3.4 (epan/dissectors/packet-radiotap.c)
     IEEE80211_RADIOTAP_TSFT => 0,
     IEEE80211_RADIOTAP_FLAGS => 1,
@@ -228,7 +230,10 @@ my $min_samples = 10;
 my @colors = qw(brown green blue);
 
 sub HELP_MESSAGE {
-    pod2usage(1);
+    pod2usage(
+	-message => "MUltiPath Estimator (mupe ".MUPE_VERSION.")\n",
+	-exitval => 1,
+    );
 }
 
 my $tfactor = 2;
