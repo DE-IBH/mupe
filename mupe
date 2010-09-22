@@ -1236,6 +1236,10 @@ __DATA__
 <html xmlns="http://www.w3.org/1999/xhtml">
 <html>
 <header>
+<meta http-equiv="pragma" content="no-cache" />
+<meta http-equiv="cache-control" content="no-cache" />
+<meta http-equiv="expires" content="0" />
+<link rel="icon" type="image/png" href="mupe.png" />
 <title>[mupe] [% fn %]</title>
 <script language="javascript"> 
     function toggle(elName) {
