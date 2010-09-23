@@ -253,7 +253,7 @@ die "Could not open libpcap: $err\n" unless(defined($pcap_t));
 
 $opts{'i'} = basename($opts{'i'});
 
-my $last_tsamp = 0;
+my $last_tstamp = 0;
 my %beacons;
 my %stas;
 my %probes;
@@ -303,8 +303,8 @@ sub track_clock($$$$) {
 }
 
 sub push_beacon($$$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
-    $last_tsamp = $_[0];
+    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
+    $last_tstamp = $_[0];
 
     my ($tstamp, $bssid, $freq, $bssid2, $signal) = @_;
 
@@ -320,8 +320,8 @@ sub push_beacon($$$$$) {
 }
 
 sub push_probreq($$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
-    $last_tsamp = $_[0];
+    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
+    $last_tstamp = $_[0];
 
     my ($tstamp, $src, $freq, $signal) = @_;
 
@@ -329,8 +329,8 @@ sub push_probreq($$$$) {
 }
 
 sub push_probres($$$$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
-    $last_tsamp = $_[0];
+    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
+    $last_tstamp = $_[0];
 
     my ($tstamp, $bssid, $freq, $bssid2, $dst, $signal) = @_;
 
@@ -338,8 +338,8 @@ sub push_probres($$$$$$) {
 }
 
 sub push_data($$$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tsamp <= $_[0]);
-    $last_tsamp = $_[0];
+    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
+    $last_tstamp = $_[0];
 
     my ($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal) = @_;
 
