@@ -253,6 +253,7 @@ die "Could not open libpcap: $err\n" unless(defined($pcap_t));
 
 $opts{'i'} = basename($opts{'i'});
 
+my $first_tstamp;
 my $last_tstamp = 0;
 my %beacons;
 my %stas;
@@ -303,9 +304,6 @@ sub track_clock($$$$) {
 }
 
 sub push_beacon($$$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
-    $last_tstamp = $_[0];
-
     my ($tstamp, $bssid, $freq, $bssid2, $signal) = @_;
 
     unless(exists($beacons{$freq}->{$bssid}->{'tstamps'})) {
@@ -320,27 +318,18 @@ sub push_beacon($$$$$) {
 }
 
 sub push_probreq($$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
-    $last_tstamp = $_[0];
-
     my ($tstamp, $src, $freq, $signal) = @_;
 
     $probes{$src}->{$freq}->{'req'}->{$tstamp} = $signal;
 }
 
 sub push_probres($$$$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
-    $last_tstamp = $_[0];
-
     my ($tstamp, $bssid, $freq, $bssid2, $dst, $signal) = @_;
 
     $probes{$dst}->{$freq}->{'resp'}->{$bssid2}->{$tstamp} = $signal;
 }
 
 sub push_data($$$$$) {
-    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $_[0]);
-    $last_tstamp = $_[0];
-
     my ($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal) = @_;
 
     unless(exists($stas{$src}->{$rt_frequency}->{$bssid})) {
@@ -392,6 +381,9 @@ sub process_pkt($$$) {
     my ($type, $flags, $duration, $dst, $src, $bssid) = unpack('CCna6a6a6v', substr($pkt, $it_len));
 
     my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
+    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $tstamp);
+    $last_tstamp = $tstamp;
+    $first_tstamp = $tstamp unless(defined($first_tstamp));
 
     $dst = unpack('H12', $dst);
     $src = unpack('H12', $src);
@@ -1237,6 +1229,8 @@ $tt->process(
 	'fn' => $opts{'i'},
 	'links' => \%links,
 	'date' => $date,
+	'from' => strftime('%x %X %Z', localtime($first_tstamp)),
+	'to' => strftime('%x %X %Z', localtime($last_tstamp)),
     },
     \*HHTML
 ) || die $tt->error(), "\n";
@@ -1270,6 +1264,9 @@ __DATA__
 <div style="margin-bottom:50px;">
     <a href="http://micky.ibh.net/~liske/mupe/"><img src="mupe.png" height="64" width="64" alt="mupe logo" style="float: left; margin-right: 15px; border: 0px" /></a>
     <h1>[% fn %]</h1>
+    <p>
+	[% from %] - [% to %]
+    </p>
 </div>
 [% BLOCK link %]
 <li>
