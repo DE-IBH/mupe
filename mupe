@@ -259,6 +259,7 @@ my %beacons;
 my %stas;
 my %probes;
 my %clocks;
+my %tparams;
 
 sub track_beacon($$$$$) {
     my ($tstamp, $bssid, $freq, $bssid2, $bi) = @_;
@@ -284,6 +285,32 @@ sub track_beacon($$$$$) {
 
     push(@{$beacons{$freq}->{$bssid}->{'beacons'}->{$bssid2}}, $tstamp);
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
+}
+
+sub track_params($$$$) {
+    my ($tstamp, $bssid, $freq, $params) = @_;
+
+    # SSID
+    if(exists($params->{'ssid'})) {
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon SSID '$tparams{$freq}->{$bssid}->{ssid}' to '$params->{ssid}'."}++
+	    if(exists($tparams{$freq}->{$bssid}->{'ssid'}) &&
+	       ($tparams{$freq}->{$bssid}->{'ssid'} ne $params->{'ssid'}));
+	$tparams{$freq}->{$bssid}->{'ssid'} = $params->{'ssid'};
+    }
+
+    # AP name
+    if(exists($params->{'name'})) {
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon AP name '$tparams{$freq}->{$bssid}->{name}' to '$params->{name}'."}++
+	    if(exists($tparams{$freq}->{$bssid}->{'name'}) &&
+	       ($tparams{$freq}->{$bssid}->{'name'} ne $params->{'name'}));
+	$tparams{$freq}->{$bssid}->{'name'} = $params->{'name'};
+    }
+
+    # # of clients
+    if(exists($params->{'clients'})) {
+	push(@{$tparams{$freq}->{$bssid}->{'tstamp'}}, $tstamp);
+	push(@{$tparams{$freq}->{$bssid}->{'clients'}}, $params->{'clients'});
+    }
 }
 
 sub track_clock($$$$) {
@@ -395,9 +422,34 @@ sub process_pkt($$$) {
 
     # beacon frame
     if($type == 0x80) {
-	my ($ts_low, $ts_high, $bi) = unpack('VVv', substr($pkt, $it_len + 0x18));
+	my ($ts_low, $ts_high, $bi, $cap) = unpack('VVvv', substr($pkt, $it_len + 0x18));
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
+
+	$it_len += 0x18 + 0x0c;
+	my %tagged_params;
+	# read tagged parameters
+	while($it_len < $hdr->{caplen}) {
+	    my $tnum = unpack('C', substr($pkt, $it_len++, 1));
+	    my $tlen = unpack('C', substr($pkt, $it_len++, 1));
+
+	    # SSID
+	    if($tnum == 0x00) {
+		$tagged_params{'ssid'} = substr($pkt, $it_len, $tlen);
+	    }
+	    # Cisco CCX1 CKIP + Device Name
+	    elsif($tnum == 0x85) {
+		if($tlen >= 26) {
+		    my ($name, $clients) = unpack('Z16C', substr($pkt, $it_len + 0x0a));
+		    $tagged_params{'name'} = $name;
+		    $tagged_params{'clients'} = $clients;
+		}
+		last;
+	    }
+
+	    $it_len += $tlen;
+	}
+
 
 	$warnings{'beacons'}->{$bssid}->{"Unexpected dst=$dst in beacon of bssid=$bssid!"}++ unless($dst eq 'ffff.ffff.ffff');
 	$warnings{'beacons'}->{$bssid}->{"Unexpected src!=bssid ($src!=$bssid) in beacon!"}++ unless($src eq $bssid);
@@ -407,6 +459,7 @@ sub process_pkt($$$) {
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $bi);
 	track_clock($tstamp, $bssid, $rt_frequency, $ts);
+	track_params($tstamp, $bssid, $rt_frequency, \%tagged_params);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
