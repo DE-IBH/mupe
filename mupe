@@ -459,7 +459,7 @@ sub process_pkt($$$) {
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $bi);
 	track_clock($tstamp, $bssid, $rt_frequency, $ts);
-	track_params($tstamp, $bssid, $rt_frequency, \%tagged_params);
+	track_params($tstamp, $bssid2, $rt_frequency, \%tagged_params);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
@@ -1281,6 +1281,7 @@ $tt->process(
 	'params' => join(' ', @params),
 	'fn' => $opts{'i'},
 	'links' => \%links,
+	'tparams' => \%tparams,
 	'date' => $date,
 	'from' => strftime('%x %X %Z', localtime($first_tstamp)),
 	'to' => strftime('%x %X %Z', localtime($last_tstamp)),
@@ -1348,7 +1349,9 @@ if(keys %{$stash->get('links')->{'beacons'}}) {
 
     foreach my $freq (keys %{$stash->get('links')->{'beacons'}}) {
 	foreach my $bssid (keys %{$stash->get('links')->{'beacons'}->{$freq}}) {
-	    print "<h3>$bssid</h3>\n";
+	    print "<h3>$bssid";
+	    print ' (',$stash->get('tparams')->{$freq}->{$bssid}->{'name'},')' if(exists($stash->get('tparams')->{$freq}->{$bssid}->{'name'}));
+	    print "</h3>\n";
 	    print "<ul>\n";
 
 	    foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'beacons'}->{$freq}->{$bssid}}) {
