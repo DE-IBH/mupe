@@ -834,7 +834,7 @@ sub build_clients($$$) {
     my %res;
     foreach my $bssid2 (@bssid2) {
 	my $title = 'BSSID clients';
-	$title .= " [SSID = $data->{clients}->{$bssid2}]"
+	$title .= " [SSID = $data->{ssid}->{$bssid2}]"
 	    if(exists($data->{'ssid'}->{$bssid2}));
 
 	my $fn = sprintf $tfn, "bssid-clients.$bssid2", $opts{'f'};
