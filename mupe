@@ -407,7 +407,7 @@ sub process_pkt($$$) {
     my ($type, $flags, $duration, $dst, $src, $bssid) = unpack('CCna6a6a6v', substr($pkt, $it_len));
 
     my $tstamp = $hdr->{tv_sec}+$hdr->{tv_usec}/1000000;
-    die "Oops, timestamps are not linear!\n" unless($last_tstamp <= $tstamp);
+    die "\nOops, timestamps are not linear ($last_tstamp > $tstamp)!\n" unless($last_tstamp <= $tstamp);
     $last_tstamp = $tstamp;
     $first_tstamp = $tstamp unless(defined($first_tstamp));
 
