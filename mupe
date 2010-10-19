@@ -826,6 +826,51 @@ sub build_losses($$$) {
     return %res;
 }
 
+sub build_clients($$$) {
+    my ($tfn, $subtitle, $data) = @_;
+
+    ### BSSID Clients ###
+    my @bssid2 = sort keys %{$data->{'clients'}};
+    my %res;
+    foreach my $bssid2 (@bssid2) {
+	my $title = 'BSSID clients';
+	$title .= " [SSID = $data->{clients}->{$bssid2}]"
+	    if(exists($data->{'ssid'}->{$bssid2}));
+
+	my $fn = sprintf $tfn, "bssid-clients.$bssid2", $opts{'f'};
+	unlink($fn);
+	Chart::Gnuplot->new(
+	    output => $fn,
+	    title => "$title\\n$subtitle",
+	    xlabel => 'timeslot',
+#		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	    imagesize => $opts{'d'},
+	    grid => {
+		width => 1.
+	    },
+	    timefmt => '"%s"',
+	    xdata => 'time',
+	    bg => 'white',
+	)->plot2d(
+	    Chart::Gnuplot::DataSet->new(
+		xdata => $data->{'clients'}->{$bssid2}->{'tstamp'},
+		ydata => $data->{'clients'}->{$bssid2}->{'count'},
+		style => $opts{'l'},
+		title => "#clients",
+		using => '1:2',
+	    ),
+	);
+
+	my $link = "BSSID = $bssid2";
+	$link .= ", SSID = $data->{ssid}->{$bssid2}"
+	    if(exists($data->{'ssid'}->{$bssid2}));
+	$res{"BSSID clients [$link]"}->{'img'} = $fn;
+    }
+    close(HD);
+
+    return %res;
+}
+
 sub build_clock($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
@@ -1230,8 +1275,9 @@ foreach my $freq (keys %beacons) {
 
 	my %l = (
 	    build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
-	    build_distri($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
-	    build_losses($tfn, $subtitle,  $beacons{$freq} -> {$bssid}),
+	    build_distri($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
+	    build_losses($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
+	    build_clients($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
 	    build_clock($tfn, $subtitle, $clocks{$freq} -> {$bssid}),
 	);
 
