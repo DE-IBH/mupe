@@ -259,7 +259,6 @@ my %beacons;
 my %stas;
 my %probes;
 my %clocks;
-my %tparams;
 
 sub track_beacon($$$$$) {
     my ($tstamp, $bssid, $freq, $bssid2, $bi) = @_;
@@ -287,29 +286,29 @@ sub track_beacon($$$$$) {
     $beacons{$freq}->{$bssid}->{'beacon'}->{$bssid2}->{'tstamp'} = $tstamp;
 }
 
-sub track_params($$$$) {
-    my ($tstamp, $bssid, $freq, $params) = @_;
+sub track_params($$$$$) {
+    my ($tstamp, $bssid, $freq, $bssid2, $params) = @_;
 
     # SSID
     if(exists($params->{'ssid'})) {
-	$warnings{'beacons'}->{$bssid}->{"Changed beacon SSID '$tparams{$freq}->{$bssid}->{ssid}' to '$params->{ssid}'."}++
-	    if(exists($tparams{$freq}->{$bssid}->{'ssid'}) &&
-	       ($tparams{$freq}->{$bssid}->{'ssid'} ne $params->{'ssid'}));
-	$tparams{$freq}->{$bssid}->{'ssid'} = $params->{'ssid'};
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon SSID '$beacons{$freq}->{$bssid}->{ssid}->{$bssid2}' to '$params->{ssid}'."}++
+	    if(exists($beacons{$freq}->{$bssid}->{'ssid'}->{$bssid2}) &&
+	       ($beacons{$freq}->{$bssid}->{'ssid'}->{$bssid2} ne $params->{'ssid'}));
+	$beacons{$freq}->{$bssid}->{'ssid'}->{$bssid2} = $params->{'ssid'};
     }
 
     # AP name
     if(exists($params->{'name'})) {
-	$warnings{'beacons'}->{$bssid}->{"Changed beacon AP name '$tparams{$freq}->{$bssid}->{name}' to '$params->{name}'."}++
-	    if(exists($tparams{$freq}->{$bssid}->{'name'}) &&
-	       ($tparams{$freq}->{$bssid}->{'name'} ne $params->{'name'}));
-	$tparams{$freq}->{$bssid}->{'name'} = $params->{'name'};
+	$warnings{'beacons'}->{$bssid}->{"Changed beacon AP name '$beacons{$freq}->{$bssid}->{name}' to '$params->{name}'."}++
+	    if(exists($beacons{$freq}->{$bssid}->{'name'}) &&
+	       ($beacons{$freq}->{$bssid}->{'name'} ne $params->{'name'}));
+	$beacons{$freq}->{$bssid}->{'name'} = $params->{'name'};
     }
 
     # # of clients
     if(exists($params->{'clients'})) {
-	push(@{$tparams{$freq}->{$bssid}->{'tstamp'}}, $tstamp);
-	push(@{$tparams{$freq}->{$bssid}->{'clients'}}, $params->{'clients'});
+	push(@{$beacons{$freq}->{$bssid}->{'clients'}->{$bssid2}->{'tstamp'}}, $tstamp);
+	push(@{$beacons{$freq}->{$bssid}->{'clients'}->{$bssid2}->{'count'}}, $params->{'clients'});
     }
 }
 
@@ -459,7 +458,7 @@ sub process_pkt($$$) {
 
 	track_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $bi);
 	track_clock($tstamp, $bssid, $rt_frequency, $ts);
-	track_params($tstamp, $bssid2, $rt_frequency, \%tagged_params);
+	track_params($tstamp, $bssid, $rt_frequency, $bssid2, \%tagged_params);
 	push_beacon($tstamp, $bssid, $rt_frequency, $bssid2, $rt_ssi_signal);
 
 	print "b";
@@ -758,11 +757,15 @@ sub build_losses($$$) {
 	    }
         }
 
+	my $title = 'beacon frame losses';
+	$title .= " [SSID = $data->{ssid}->{$bssid2}]"
+	    if(exists($data->{'ssid'}->{$bssid2}));
+
 	my $fn = sprintf $tfn, "beacon-losses.$bssid2", $opts{'f'};
 	unlink($fn);
 	Chart::Gnuplot->new(
 	    output => $fn,
-	    title => "beacon frame losses\\n$subtitle",
+	    title => "$title\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	    imagesize => $opts{'d'},
@@ -796,7 +799,10 @@ sub build_losses($$$) {
 	    ),
 	);
 
-	$res{"beacon frame losses [$bssid2]"}->{'img'} = $fn;
+	my $link = "BSSID = $bssid2";
+	$link .= ", SSID = $data->{ssid}->{$bssid2}"
+	    if(exists($data->{'ssid'}->{$bssid2}));
+	$res{"beacon frame losses [$link]"}->{'img'} = $fn;
     }
     close(HD);
 
@@ -1172,6 +1178,7 @@ sub build_probes($$$) {
 
 
 my %links;
+my %names;
 
 print "\nGenerating beacon frame graphs:\n";
 foreach my $freq (keys %beacons) {
@@ -1200,7 +1207,9 @@ foreach my $freq (keys %beacons) {
 	my $tfn = $opts{'i'};
 	$tfn =~ s/\.pcap$//;
 	$tfn .= ".BSSID-$bssid-${freq}MHz.%s.%s";
-	my $subtitle = "$opts{i} [BSSID = $bssid, f = ${freq}MHz, tslot = ${tfactor}s]";
+	my $subtitle = "$opts{i} [";
+	$subtitle .= "AP = $beacons{$freq}->{$bssid}->{name}, " if(exists($beacons{$freq}->{$bssid}->{'name'}));
+	$subtitle .= "BSSID = $bssid, f = ${freq}MHz, tslot = ${tfactor}s]";
 
 	my %l = (
 	    build_trend_jitter($tfn, $subtitle, $beacons{$freq} -> {$bssid}),
@@ -1210,6 +1219,9 @@ foreach my $freq (keys %beacons) {
 	);
 
 	$links{'beacons'}->{$freq}->{$bssid} = \%l;
+	$names{'beacons'}->{$freq}->{$bssid} = $bssid;
+	$names{'beacons'}->{$freq}->{$bssid} .= ' [AP = '.$beacons{$freq}->{$bssid}->{'name'}.']'
+	    if(exists($beacons{$freq}->{$bssid}->{'name'}));
     }
 }
 
@@ -1281,7 +1293,7 @@ $tt->process(
 	'params' => join(' ', @params),
 	'fn' => $opts{'i'},
 	'links' => \%links,
-	'tparams' => \%tparams,
+	'names' => \%names,
 	'date' => $date,
 	'from' => strftime('%x %X %Z', localtime($first_tstamp)),
 	'to' => strftime('%x %X %Z', localtime($last_tstamp)),
@@ -1349,9 +1361,7 @@ if(keys %{$stash->get('links')->{'beacons'}}) {
 
     foreach my $freq (keys %{$stash->get('links')->{'beacons'}}) {
 	foreach my $bssid (keys %{$stash->get('links')->{'beacons'}->{$freq}}) {
-	    print "<h3>$bssid";
-	    print ' (',$stash->get('tparams')->{$freq}->{$bssid}->{'name'},')' if(exists($stash->get('tparams')->{$freq}->{$bssid}->{'name'}));
-	    print "</h3>\n";
+	    print '<h3>', $stash->get('names')->{'beacons'}->{$freq}->{$bssid}, "</h3>\n";
 	    print "<ul>\n";
 
 	    foreach my $k (sort {$a cmp $b} keys %{$stash->get('links')->{'beacons'}->{$freq}->{$bssid}}) {
