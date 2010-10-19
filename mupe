@@ -833,7 +833,7 @@ sub build_clients($$$) {
     my @bssid2 = sort keys %{$data->{'clients'}};
     my %res;
     foreach my $bssid2 (@bssid2) {
-	my $title = 'BSSID clients';
+	my $title = 'BSSID #clients';
 	$title .= " [SSID = $data->{ssid}->{$bssid2}]"
 	    if(exists($data->{'ssid'}->{$bssid2}));
 
@@ -844,6 +844,7 @@ sub build_clients($$$) {
 	    title => "$title\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	    yrange => [0, max(@{$data->{'clients'}->{$bssid2}->{'count'}})],
 	    imagesize => $opts{'d'},
 	    grid => {
 		width => 1.
@@ -864,7 +865,7 @@ sub build_clients($$$) {
 	my $link = "BSSID = $bssid2";
 	$link .= ", SSID = $data->{ssid}->{$bssid2}"
 	    if(exists($data->{'ssid'}->{$bssid2}));
-	$res{"BSSID clients [$link]"}->{'img'} = $fn;
+	$res{"bssid #clients [$link]"}->{'img'} = $fn;
     }
     close(HD);
 
