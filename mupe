@@ -259,6 +259,13 @@ my %beacons;
 my %stas;
 my %probes;
 my %clocks;
+my %counters = (
+    frames => 0,
+    beacons => 0,
+    data => 0,
+    preq => 0,
+    presp => 0,
+);
 
 sub track_beacon($$$$$) {
     my ($tstamp, $bssid, $freq, $bssid2, $bi) = @_;
@@ -370,6 +377,8 @@ sub push_data($$$$$) {
 sub process_pkt($$$) {
     my($arg, $hdr, $pkt) = @_;
 
+    $counters{'frames'}++;
+
     # decode Radiotap header
     my ($it_version, $it_pad, $it_len, $it_present) = unpack('CCSL', $pkt);
     my $offset = 8;
@@ -421,6 +430,8 @@ sub process_pkt($$$) {
 
     # beacon frame
     if($type == 0x80) {
+	$counters{'beacons'}++;
+
 	my ($ts_low, $ts_high, $bi, $cap) = unpack('VVvv', substr($pkt, $it_len + 0x18));
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
@@ -465,12 +476,16 @@ sub process_pkt($$$) {
     }
     # probe request frame
     elsif($type == 0x40) {
+	$counters{'preq'}++;
+
 	push_probreq($tstamp, $src, $rt_frequency, $rt_ssi_signal);
 
 	print "p";
     }
     # probe response frame
     elsif($type == 0x50) {
+	$counters{'presp'}++;
+
 	my ($ts_low, $ts_high, $bi) = unpack('VVv', substr($pkt, $it_len + 0x18));
 	my $ts = $ts_high << 32 | $ts_low;
 	$bi *= 1024;
@@ -489,6 +504,8 @@ sub process_pkt($$$) {
     }
     # data frame
     elsif(($type & 0x0f) == 8 && !($src =~ /0[01]00\.0000\.0000/)) {
+	$counters{'data'}++;
+
 	push_data($tstamp, $src, $rt_frequency, $bssid, $rt_ssi_signal);
 
 	print "d";
@@ -1297,6 +1314,7 @@ $tt->process(
 	'date' => $date,
 	'from' => strftime('%x %X %Z', localtime($first_tstamp)),
 	'to' => strftime('%x %X %Z', localtime($last_tstamp)),
+	'counters' => \%counters,
     },
     \*HHTML
 ) || die $tt->error(), "\n";
@@ -1330,10 +1348,27 @@ __DATA__
 <div style="margin-bottom:50px;">
     <a href="http://micky.ibh.net/~liske/mupe/"><img src="mupe.png" height="64" width="64" alt="mupe logo" style="float: left; margin-right: 15px; border: 0px" /></a>
     <h1>[% fn %]</h1>
-    <p>
-	[% from %] - [% to %]
-    </p>
 </div>
+<h2>Overview</h2>
+<pre>
+first frame: [% from %]
+
+last frame : [% to %]
+
+
+[% USE number = format('%8d') %]
+#beacons   : [% number(counters.beacons) %]
+
+#data      : [% number(counters.data) %]
+
+#probe req : [% number(counters.preq) %]
+
+#probe resp: [% number(counters.presp) %]
+
+---------------------
+#frames    : [% number(counters.frames) %]
+
+</pre>
 [% BLOCK link %]
 <li>
     <a href="javascript:toggle('[% id %]');">[% title %]</a>
