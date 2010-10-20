@@ -540,9 +540,12 @@ sub write_stats($$$) {
 sub build_trend_jitter($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
+    my @signals = @{$data->{'signals'}->{'data'}};
     my %trend;
     my @tslots;
     my $i = -1;
+#    my @diff;
+#    my $l;
     foreach my $tstamp ($data->{'tstamps'}->get_data()) {
 	$i++;
 	my $t = int($tstamp) - (int($tstamp) % $tfactor);
@@ -550,6 +553,15 @@ sub build_trend_jitter($$$) {
 
 	$trend{'signals'}->{$t} = Statistics::Descriptive::Full->new() unless(exists($trend{'signals'}->{$t}));
 	$trend{'signals'}->{$t}->add_data(${$data->{'signals'}->{'data'}}[$i]);
+
+#	if(defined($l)) {
+#	    push(@diff,${$data->{'signals'}->{'data'}}[$i]-$l);
+#	}
+#	else {
+#	    push(@diff, undef);
+#	}
+
+#	$l = ${$data->{'signals'}->{'data'}}[$i];
     }
 
     my @ds;
@@ -571,6 +583,7 @@ sub build_trend_jitter($$$) {
 
     open(HD, sprintf ">$tfn", 'signal-trend-grouped', 'txt');
     write_stats(*HD, 'signal', $data->{'signals'});
+
     foreach my $col (sort keys %data) {
 	my $color = shift(@colors);
 	push(@colors, $color);
@@ -658,8 +671,6 @@ sub build_trend_jitter($$$) {
     write_stats(*HD, 'jitter', $sr);
     close(HD);
 
-
-
     $fn = sprintf $tfn, 'signal-trend-cont', $opts{'f'};
     unlink($fn);
     Chart::Gnuplot->new(
@@ -668,6 +679,7 @@ sub build_trend_jitter($$$) {
 	xlabel => 'timestamp',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
+#	y2label => 'dB',
 	imagesize => $opts{'d'},
 	grid => {
 	    width => 1.
@@ -678,13 +690,23 @@ sub build_trend_jitter($$$) {
     )->plot2d(
 	Chart::Gnuplot::DataSet->new(
 	    xdata => $data->{'tstamps'}->{'data'},
-	    ydata => $data->{'signals'}->{'data'},
-	    style => $opts{'l'},
+	    ydata => \@signals,
+	    style => 'lines',
 	    linetype => 1,
 	    color => 'red',
 	    title => 'signal',
-	    using => '1:2'
+	    using => '1:2',
 	),
+#	Chart::Gnuplot::DataSet->new(
+#	    xdata => $data->{'tstamps'}->{'data'},
+#	    ydata => \@diff,
+#	    style => 'lines',
+#	    linetype => 1,
+#	    color => 'green',
+#	    title => '(d/dx)signal',
+#	    using => '1:2',
+#	    axes => 'x1y2',
+#	),
     );
     open(HD, sprintf ">$tfn", 'signal-trend-cont', 'txt');
     write_stats(*HD, 'signal', $data->{'signals'});
@@ -879,7 +901,8 @@ sub build_clients($$$) {
 	    title => "$title\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
-	    yrange => [0, max(@{$data->{'clients'}->{$bssid2}->{'count'}})+2],
+	    yrange => [0, max(@{$data->{'clients'}->{$bssid2}->{'count'}})+1],
+	    ytics => $data->{'clients'}->{$bssid2}->{'count'},
 	    imagesize => $opts{'d'},
 	    grid => {
 		width => 1.
@@ -920,7 +943,7 @@ sub build_clock($$$) {
     Chart::Gnuplot->new(
 	output => $fn,
 	title => "beacon frame MAC clock difference\\n$subtitle",
-	xlabel => 'timeslot',
+	xlabel => 'timestamp',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'usec',
 	imagesize => $opts{'d'},
