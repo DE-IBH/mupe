@@ -540,9 +540,6 @@ sub write_stats($$$) {
 sub build_trend_jitter($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
-    my $fn = sprintf $tfn, 'signal-trend', $opts{'f'};
-    unlink($fn);
-
     my %trend;
     my @tslots;
     my $i = -1;
@@ -572,7 +569,7 @@ sub build_trend_jitter($$$) {
 	$sr -> add_data($trend{'signals'}->{$t}->sample_range());
     }
 
-    open(HD, sprintf ">$tfn", 'signal-trend', 'txt');
+    open(HD, sprintf ">$tfn", 'signal-trend-grouped', 'txt');
     write_stats(*HD, 'signal', $data->{'signals'});
     foreach my $col (sort keys %data) {
 	my $color = shift(@colors);
@@ -604,9 +601,11 @@ sub build_trend_jitter($$$) {
     }
     close(HD);
 
+    my $fn = sprintf $tfn, 'signal-trend-grouped', $opts{'f'};
+    unlink($fn);
     Chart::Gnuplot->new(
 	output => $fn,
-	title => "beacon frame signal trend\\n$subtitle",
+	title => "beacon frame signal trend (grouped)\\n$subtitle",
 	xlabel => 'timeslot',
 #	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
 	ylabel => 'dBm',
@@ -620,7 +619,7 @@ sub build_trend_jitter($$$) {
     )->plot2d(@ds);
 
 
-    $fn = sprintf $tfn, 'signal-jitter', $opts{'f'};
+    $fn = sprintf $tfn, 'signal-trend-grouped-jitter', $opts{'f'};
     unlink($fn);
     my @sr = $sr->get_data();
     Chart::Gnuplot->new(
@@ -655,18 +654,54 @@ sub build_trend_jitter($$$) {
 	    width => 5,
 	),
     );
-    open(HD, sprintf ">$tfn", 'signal-jitter', 'txt');
+    open(HD, sprintf ">$tfn", 'signal-trend-grouped-jitter', 'txt');
     write_stats(*HD, 'jitter', $sr);
     close(HD);
 
-    return (
-	'beacon frame signal trend' => {
-	    'img' => sprintf($tfn, 'signal-trend', $opts{'f'}),
-	    'txt' => sprintf($tfn, 'signal-trend', 'txt'),
+
+
+    $fn = sprintf $tfn, 'signal-trend-cont', $opts{'f'};
+    unlink($fn);
+    Chart::Gnuplot->new(
+	output => $fn,
+	title => "beacon frame signal trend (continuous)\\n$subtitle",
+	xlabel => 'timestamp',
+#	xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	ylabel => 'dBm',
+	imagesize => $opts{'d'},
+	grid => {
+	    width => 1.
 	},
-	'beacon frame signal jitter' => {
-	    'img' => sprintf($tfn, 'signal-jitter', $opts{'f'}),
-	    'txt' => sprintf($tfn, 'signal-jitter', 'txt'),
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+    )->plot2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => $data->{'tstamps'}->{'data'},
+	    ydata => $data->{'signals'}->{'data'},
+	    style => $opts{'l'},
+	    linetype => 1,
+	    color => 'red',
+	    title => 'signal',
+	    using => '1:2'
+	),
+    );
+    open(HD, sprintf ">$tfn", 'signal-trend-cont', 'txt');
+    write_stats(*HD, 'signal', $data->{'signals'});
+    close(HD);
+
+    return (
+	'beacon frame signal trend (continuous)' => {
+	    'img' => sprintf($tfn, 'signal-trend-cont', $opts{'f'}),
+	    'txt' => sprintf($tfn, 'signal-trend-cont', 'txt'),
+	},
+	'beacon frame signal trend (grouped)' => {
+	    'img' => sprintf($tfn, 'signal-trend-grouped', $opts{'f'}),
+	    'txt' => sprintf($tfn, 'signal-trend-grouped', 'txt'),
+	},
+	'beacon frame signal trend (grouped) jitter' => {
+	    'img' => sprintf($tfn, 'signal-trend-grouped-jitter', $opts{'f'}),
+	    'txt' => sprintf($tfn, 'signal-trend-grouped-jitter', 'txt'),
 	},
     );
 }
