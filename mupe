@@ -797,39 +797,20 @@ sub build_losses($$$) {
 	print HD " # missing = ".$data->{'losses'}->{$bssid2}->count()."\n";
 	printf HD " loss rate = %.2f%%\n\n", (100 * $data->{'losses'}->{$bssid2}->count() / ($data->{'losses'}->{$bssid2}->count() + $data->{'counter'}->{$bssid2}));
 
-	my %data;
+	my @xbeacons;
+	my @ybeacons;
+	my @xlosses;
+	my @ylosses;
 	foreach my $ts ($data->{'losses'}->{$bssid2}->get_data()) {
-	    $data{ int($ts) - (int($ts) % $tfactor) }++;
+	    push(@xlosses, $ts);
+	    push(@ylosses, 1);
 	}
 
 	my %bdata;
 	foreach my $ts (@{$data->{'beacons'}->{$bssid2}}) {
-	    $bdata{ int($ts) - (int($ts) % $tfactor) }++;
+	    push(@xbeacons, $ts);
+	    push(@ybeacons, 1);
 	}
-
-	my @tslots;
-	my @losses;
-	my @beacons;
-	foreach my $tstamp ($data->{'tstamps'}->get_data()) {
-	    my $ts = int($tstamp) - (int($tstamp) % $tfactor);
-
-	    unless($#tslots >= 0 && $tslots[$#tslots] == $ts) {
-		push(@tslots, $ts) ;
-		if(exists($data{$ts})) {
-		    push(@losses, $data{$ts});
-		}
-		else {
-		    push(@losses, 0);
-		}
-
-		if(exists($bdata{$ts})) {
-		    push(@beacons, $bdata{$ts});
-		}
-		else {
-		    push(@beacons, 0);
-		}
-	    }
-        }
 
 	my $title = 'beacon frame losses';
 	$title .= " [SSID = $data->{ssid}->{$bssid2}]"
@@ -842,6 +823,8 @@ sub build_losses($$$) {
 	    title => "$title\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
+	    yrange => [0,2],
+	    ytics => [0,1],
 	    imagesize => $opts{'d'},
 	    grid => {
 		width => 1.
@@ -851,25 +834,25 @@ sub build_losses($$$) {
 	    bg => 'white',
 	)->plot2d(
 	    Chart::Gnuplot::DataSet->new(
-		xdata => \@tslots,
-		ydata => \@losses,
+		xdata => \@xbeacons,
+		ydata => \@ybeacons,
 		style => 'impulses',
-		width => 5,
+		width => 3,
+		linetype => 1,
+		color => 'green',
+		title => "beacons $bssid2",
+		using => '1:2',
+		axes => 'x1y2',
+	    ),
+	    Chart::Gnuplot::DataSet->new(
+		xdata => \@xlosses,
+		ydata => \@ylosses,
+		style => 'impulses',
+		width => 3,
 		linetype => 1,
 		color => 'red',
 		title => "losses $bssid2",
 		using => '1:2',
-	    ),
-	    Chart::Gnuplot::DataSet->new(
-		xdata => \@tslots,
-		ydata => \@beacons,
-		style => 'lines',
-		width => 3,
-		linetype => 1,
-		color => 'dark-green',
-		title => "beacons $bssid2",
-		using => '1:2',
-		axes => 'x1y2',
 	    ),
 	);
 
