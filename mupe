@@ -803,7 +803,7 @@ sub build_losses($$$) {
 	my @ylosses;
 	foreach my $ts ($data->{'losses'}->{$bssid2}->get_data()) {
 	    push(@xlosses, $ts);
-	    push(@ylosses, 1);
+	    push(@ylosses, -1);
 	}
 
 	my %bdata;
@@ -823,8 +823,8 @@ sub build_losses($$$) {
 	    title => "$title\\n$subtitle",
 	    xlabel => 'timeslot',
 #		xrange => [$data->{'tstamps'}->min(), $data->{'tstamps'}->max()],
-	    yrange => [0,2],
-	    ytics => [0,1],
+	    yrange => [-1,1],
+	    ytics => [0],
 	    imagesize => $opts{'d'},
 	    grid => {
 		width => 1.
@@ -837,21 +837,20 @@ sub build_losses($$$) {
 		xdata => \@xbeacons,
 		ydata => \@ybeacons,
 		style => 'impulses',
-		width => 3,
+		width => 2,
 		linetype => 1,
 		color => 'green',
-		title => "beacons $bssid2",
+		title => "beacons",
 		using => '1:2',
-		axes => 'x1y2',
 	    ),
 	    Chart::Gnuplot::DataSet->new(
 		xdata => \@xlosses,
 		ydata => \@ylosses,
 		style => 'impulses',
-		width => 3,
+		width => 2,
 		linetype => 1,
 		color => 'red',
-		title => "losses $bssid2",
+		title => "losses",
 		using => '1:2',
 	    ),
 	);
