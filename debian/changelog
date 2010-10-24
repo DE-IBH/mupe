@@ -1,3 +1,14 @@
+mupe (1.0.0) unstable; urgency=low
+
+  * Add marker file support (required DateTimeX::Easy).
+  * Change beacon loss graphs.
+  * Unify xrange on all time based graphs.
+  * Many minor improvements.
+  * Parse 'Cisco CCX1 CKIP + Device Name' beacon IE.
+  * Add bssid client count graph.
+
+ -- Thomas Liske <liske@ibh.de>  
+
 mupe (0.9) unstable; urgency=low
 
   * Drop SQLite usage.
