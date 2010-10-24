@@ -359,8 +359,8 @@ sub track_params($$$$$) {
 
     # # of clients
     if(exists($params->{'clients'})) {
-	push(@{$beacons{$freq}->{$bssid}->{'clients'}->{$bssid2}->{'tstamp'}}, $tstamp);
-	push(@{$beacons{$freq}->{$bssid}->{'clients'}->{$bssid2}->{'count'}}, $params->{'clients'});
+	push(@{$beacons{$freq}->{$bssid}->{'clients'}->{'tstamp'}}, $tstamp);
+	push(@{$beacons{$freq}->{$bssid}->{'clients'}->{'count'}}, $params->{'clients'});
     }
 }
 
@@ -924,50 +924,41 @@ sub build_clients($$$) {
     my ($tfn, $subtitle, $data) = @_;
 
     ### BSSID Clients ###
-    my @bssid2 = sort keys %{$data->{'clients'}};
     my %res;
-    foreach my $bssid2 (@bssid2) {
-	my $title = 'BSSID #clients';
-	$title .= " [SSID = $data->{ssid}->{$bssid2}]"
-	    if(exists($data->{'ssid'}->{$bssid2}));
+    my $title = 'BSSID #clients';
 
-	my $fn = sprintf $tfn, "bssid-clients.$bssid2", $opts{'f'};
-	unlink($fn);
-	my $chart=Chart::Gnuplot->new(
-	    output => $fn,
-	    title => "$title\\n$subtitle",
-	    xlabel => 'timeslot',
-	    xrange => \@xrange,
-	    yrange => [0, max(@{$data->{'clients'}->{$bssid2}->{'count'}})+1],
-	    ytics => $data->{'clients'}->{$bssid2}->{'count'},
-	    imagesize => $opts{'d'},
-	    grid => {
-		width => 1.
-	    },
-	    timefmt => '"%s"',
-	    xdata => 'time',
-	    bg => 'white',
-	    legend => {
-		position => 'below',
-	    },
-	);
-	chart_bg($chart);
-	$chart->plot2d(
-	    Chart::Gnuplot::DataSet->new(
-		xdata => $data->{'clients'}->{$bssid2}->{'tstamp'},
-		ydata => $data->{'clients'}->{$bssid2}->{'count'},
-		style => $opts{'l'},
-		title => "#clients",
-		using => '1:2',
-	    ),
-	);
+    my $fn = sprintf $tfn, "bssid-clients", $opts{'f'};
+    unlink($fn);
+    my $chart=Chart::Gnuplot->new(
+	output => $fn,
+	title => "$title\\n$subtitle",
+	xlabel => 'timeslot',
+	xrange => \@xrange,
+	yrange => [0, max(@{$data->{'clients'}->{'count'}})+1],
+	ytics => $data->{'clients'}->{'count'},
+	imagesize => $opts{'d'},
+	grid => {
+	    width => 1.
+	},
+	timefmt => '"%s"',
+	xdata => 'time',
+	bg => 'white',
+	legend => {
+	    position => 'below',
+	},
+    );
+    chart_bg($chart);
+    $chart->plot2d(
+	Chart::Gnuplot::DataSet->new(
+	    xdata => $data->{'clients'}->{'tstamp'},
+	    ydata => $data->{'clients'}->{'count'},
+	    style => $opts{'l'},
+	    title => "#clients",
+	    using => '1:2',
+	),
+    );
 
-	my $link = "BSSID = $bssid2";
-	$link .= ", SSID = $data->{ssid}->{$bssid2}"
-	    if(exists($data->{'ssid'}->{$bssid2}));
-	$res{"bssid #clients [$link]"}->{'img'} = $fn;
-    }
-    close(HD);
+    $res{"bssid #clients"}->{'img'} = $fn;
 
     return %res;
 }
